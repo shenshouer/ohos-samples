@@ -1,6 +1,6 @@
 # GPUI 桌面计数器迁移到鸿蒙：需求与技术路线
 
-状态：桌面计数器已在 macOS arm64 上编译并交互验证；独立手机工程已完成 M0、M1、M2、R-1、M3-1、M3-1A、M3-2、M3-3 和 M4-1。GPUI 计数器文字与按钮已在真机显示，触摸 `Reset → + → −` 实测数值 `0 → 1 → 0`；按需帧调度及完整生命周期验收待 M4-2/M4-3。分阶段任务见 [tasks.md](tasks.md)，触摸真机记录见 [M4-1 记录](m4-1-touch.md)。
+状态：桌面计数器已在 macOS arm64 上编译并交互验证；独立手机工程已完成 M0、M1、M2、R-1、M3-1、M3-1A、M3-2、M3-3、M4-1 和 M4-2。GPUI 计数器文字与按钮、触摸 `Reset → + → −` 的 `0 → 1 → 0`、XComponent 按需帧与空闲/后台停帧均已在真机验证；完整生命周期验收待 M4-3。分阶段任务见 [tasks.md](tasks.md)，触摸和帧调度真机记录分别见 [M4-1 记录](m4-1-touch.md)、[M4-2 记录](m4-2-frame.md)。
 
 ## 目标与依赖边界
 
@@ -21,10 +21,12 @@
 
 1. **宿主与 Surface。** ArkTS `XComponent(type: 'surface')` 提供可显示区域；手写 SDK FFI 注册 Surface 创建、变化、销毁和触摸回调，取得原生窗口指针、尺寸与触摸坐标。Node-API 桥接只传递初始化及生命周期信息。每次 Surface 创建分配代号，延迟任务携带代号，销毁后丢弃旧任务，禁止访问失效指针。
 2. **系统绘制探针。** 优先用 SDK 的 `OH_Drawing_GpuContextCreate`、`OH_Drawing_SurfaceCreateOnScreen`、`OH_Drawing_SurfaceGetCanvas`、`OH_Drawing_SurfaceFlush` 在 XComponent Surface 上画背景与矩形。该路径由系统 Native Drawing 管理 GPU 后端，无需应用自己接入 Vulkan。先在真机确认窗口指针、像素格式、尺寸更新、错误码和资源释放；若失败，记录可复现证据，再评估同一 SDK 提供的原生窗口缓冲区或 EGL 接口。
-3. **GPUI 宿主。** 本项目实现 `Platform`、`PlatformWindow`、调度器、显示信息和窗口句柄接口，用 `Application::with_platform` 与 `run_embedded` 接入 ArkUI 宿主。保存应用句柄；所有 GPUI 更新在确定的单一线程串行执行。原生回调只入队，不在回调中重入 GPUI；销毁时先停止帧请求，再释放 GPUI 窗口、Drawing Surface、GPU context 与回调。
+3. **GPUI 宿主。** 本项目实现 `Platform`、`PlatformWindow`、调度器、显示信息和窗口句柄接口，用 `Application::with_platform` 与 `run_embedded` 接入 ArkUI 宿主。保存应用句柄；所有 GPUI 更新在确定的单一线程串行执行。Surface 和触摸原生回调只入队；M4-2 验证 XComponent 帧回调位于同一 ArkUI 线程后，由该回调推进 GPUI 待绘制帧。销毁时先停止帧请求，再释放 GPUI 窗口、Drawing Surface、GPU context 与回调。
 4. **Scene → Native Drawing。** 实现 `PlatformWindow::draw(&Scene)` 与 `PlatformAtlas`。按 GPUI `Scene::batches()` 的顺序先支持此计数器实际使用的纯色背景、矩形/圆角矩形、边框、裁剪、单色字形；映射像素密度、颜色/透明度及 Atlas tile。遇到该页面实际产生而尚未支持的图元时输出明确错误，不把部分画面当作迁移完成。阴影、复杂路径、彩色图像和渐变按需求逐项增加。
 5. **文字。** GPUI 的 `PlatformTextSystem` 需要字体选择、度量、字形布局和光栅化，不能仅在 `draw` 中直接绘制字符串。先用系统 Native Drawing 字体接口实现此计数器所需的拉丁字母、数字和 `−`，把光栅化结果写入自有 Atlas；比较桌面与真机的文字位置和点击区域。复杂文字、字体回退和输入法进入后续里程碑。若系统 API 无法提供某个必需信息，先做最小复现，再补足本项目 FFI/算法或评估 GPUI 核心的最小适配点。
 6. **输入与帧调度。** 将 XComponent 触摸的按下、移动、抬起和取消转换为 GPUI 的窗口输入事件，按设备密度换算坐标，让 GPUI 自己命中 `+`、`−`、`Reset`。计数变化标记窗口待绘制；先验证 XComponent 的逐帧回调能否安全调度刷新，必要时直接绑定 SDK `native_vsync` 做按需帧请求。VSync 只提供时序，不创建 Surface。
+
+M4-2 实际采用 XComponent 逐帧回调：待绘制时注册、回调到达时注销，再在 ArkUI 线程推进 GPUI 帧。真机确认空闲和后台停止连续回调，因此此阶段没有引入 Native VSync FFI。ArkTS 仍每 250 ms 做一次非绘制安全检查，用于 Surface 销毁和后台任务；它不驱动 Scene 绘制。针对本机重复绘制后出现的 NativeWindow 缓冲区状态错误，当前实现逐帧重建屏幕 Drawing Surface，复用 GPU context；最终进程未复现该错误。长期运行与实际屏幕呈现时间尚未验证，详见 [M4-2 记录](m4-2-frame.md)。
 
 ## 验收与阶段限制
 

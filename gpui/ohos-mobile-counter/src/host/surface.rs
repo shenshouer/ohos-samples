@@ -6,6 +6,7 @@ use std::sync::Mutex;
 use crate::gpui::atlas::MonoAtlas;
 use crate::gpui::{self, SurfaceEvent};
 use crate::gpui_core::Scene;
+use crate::host::frame;
 use crate::host::logging::log;
 use crate::host::touch;
 use crate::render::screen::ScreenDrawing;
@@ -228,6 +229,9 @@ fn update_surface(kind: &str, component: *mut xc::XComponent, window: *mut c_voi
     } else {
         SurfaceEvent::Changed(generation)
     });
+    if matches!(draw_result, Some(Ok(_))) {
+        frame::surface_ready(component, generation);
+    }
     match size {
         Ok((width, height)) => log(
             hilog::LOG_INFO,
@@ -295,6 +299,7 @@ unsafe extern "C" fn on_destroyed(component: *mut xc::XComponent, window: *mut c
     state.pixel_width = 0;
     state.pixel_height = 0;
     drop(state);
+    frame::surface_lost(component, generation);
     gpui::enqueue_surface(SurfaceEvent::Destroyed(generation));
     log(
         hilog::LOG_INFO,

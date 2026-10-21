@@ -31,6 +31,9 @@ fn null_pointer(step: &'static str) -> ScreenError {
 pub struct ScreenDrawing {
     context: usize,
     surface: usize,
+    window: usize,
+    info: d::ImageInfo,
+    frames: u64,
 }
 
 impl Drop for ScreenDrawing {
@@ -60,20 +63,22 @@ impl ScreenDrawing {
         let mut owned = Self {
             context: context as usize,
             surface: 0,
+            window: window as usize,
+            info: d::ImageInfo {
+                width,
+                height,
+                color_type: d::COLOR_RGBA_8888,
+                alpha_type: d::ALPHA_PREMUL,
+            },
+            frames: 0,
         };
         if context.is_null() {
             return Err(null_pointer("gpu_context_create"));
         }
         status("gpu_context_create")?;
 
-        let info = d::ImageInfo {
-            width,
-            height,
-            color_type: d::COLOR_RGBA_8888,
-            alpha_type: d::ALPHA_PREMUL,
-        };
         unsafe { d::OH_Drawing_ErrorCodeReset() };
-        let surface = unsafe { d::OH_Drawing_SurfaceCreateOnScreen(context, info, window) };
+        let surface = unsafe { d::OH_Drawing_SurfaceCreateOnScreen(context, owned.info, window) };
         owned.surface = surface as usize;
         if surface.is_null() {
             return Err(null_pointer("surface_create_on_screen"));
@@ -87,6 +92,36 @@ impl ScreenDrawing {
         scene: &Scene,
         atlas: &MonoAtlas,
     ) -> crate::gpui_core::Result<crate::render::scene::PaintStats> {
+        // Reuse the GPU context, but recreate the on-screen Drawing Surface
+        // after a flush. Reusing the same on-screen Surface for later frames
+        // produced NativeWindow's BUFFER_STATE_INVALID on the test device.
+        if self.frames > 0 {
+            if self.surface != 0 {
+                unsafe { d::OH_Drawing_SurfaceDestroy(self.surface as *mut d::Surface) };
+            }
+            self.surface = 0;
+            unsafe { d::OH_Drawing_ErrorCodeReset() };
+            let surface = unsafe {
+                d::OH_Drawing_SurfaceCreateOnScreen(
+                    self.context as *mut d::GpuContext,
+                    self.info,
+                    self.window as *mut c_void,
+                )
+            };
+            if surface.is_null() {
+                return Err(crate::gpui_core::private::anyhow::anyhow!(
+                    "scene surface_recreate returned null"
+                ));
+            }
+            self.surface = surface as usize;
+            status("surface_recreate").map_err(|error| {
+                crate::gpui_core::private::anyhow::anyhow!(
+                    "scene {} failed: {}",
+                    error.step,
+                    error.code
+                )
+            })?;
+        }
         unsafe { d::OH_Drawing_ErrorCodeReset() };
         let canvas = unsafe { d::OH_Drawing_SurfaceGetCanvas(self.surface as *mut d::Surface) };
         if canvas.is_null() {
@@ -114,6 +149,7 @@ impl ScreenDrawing {
                 error.code
             )
         })?;
+        self.frames += 1;
         Ok(stats)
     }
 }

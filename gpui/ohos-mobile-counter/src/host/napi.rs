@@ -4,7 +4,7 @@ use std::ffi::c_void;
 use std::ptr::{null, null_mut};
 
 use crate::gpui;
-use crate::host::{logging, surface};
+use crate::host::{frame, logging, surface};
 use crate::sdk_ffi::napi::{CallbackInfo, Env, Module, PropertyDescriptor, Value};
 use crate::sdk_ffi::{hilog, napi, xcomponent};
 
@@ -12,6 +12,8 @@ const MODULE_NAME: &str = "gpui_mobile_counter\0";
 const PROBE_NAME: &str = "probe\0";
 const GPUI_START_NAME: &str = "gpuiStart\0";
 const GPUI_PUMP_NAME: &str = "gpuiPump\0";
+const GPUI_PAUSE_NAME: &str = "gpuiPause\0";
+const GPUI_RESUME_NAME: &str = "gpuiResume\0";
 const XCOMPONENT_OBJECT_NAME: &str = "__NATIVE_XCOMPONENT_OBJ__\0";
 
 unsafe extern "C" fn probe(env: Env, _info: CallbackInfo) -> Value {
@@ -31,6 +33,16 @@ unsafe extern "C" fn gpui_start(env: Env, _info: CallbackInfo) -> Value {
 
 unsafe extern "C" fn gpui_pump(env: Env, _info: CallbackInfo) -> Value {
     uint32(env, gpui::pump())
+}
+
+unsafe extern "C" fn gpui_pause(env: Env, _info: CallbackInfo) -> Value {
+    frame::pause();
+    uint32(env, 1)
+}
+
+unsafe extern "C" fn gpui_resume(env: Env, _info: CallbackInfo) -> Value {
+    frame::resume();
+    uint32(env, 1)
 }
 
 fn uint32(env: Env, result: u32) -> Value {
@@ -87,6 +99,8 @@ unsafe extern "C" fn init(env: Env, exports: Value) -> Value {
         property(PROBE_NAME, Some(probe)),
         property(GPUI_START_NAME, Some(gpui_start)),
         property(GPUI_PUMP_NAME, Some(gpui_pump)),
+        property(GPUI_PAUSE_NAME, Some(gpui_pause)),
+        property(GPUI_RESUME_NAME, Some(gpui_resume)),
     ];
     // SAFETY: `exports` and `env` are provided by Node-API. The descriptor
     // remains live until this synchronous call returns.

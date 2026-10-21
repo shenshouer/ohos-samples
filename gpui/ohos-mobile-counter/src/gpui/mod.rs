@@ -17,6 +17,7 @@ use crate::gpui_core::{
     Render, Window, WindowOptions, div, prelude::*, px, rgb, size,
 };
 
+use crate::host::frame;
 use crate::host::logging::log;
 use crate::sdk_ffi::{display, hilog};
 
@@ -198,11 +199,22 @@ pub(crate) fn start() -> u32 {
 }
 
 pub(crate) fn pump() -> u32 {
+    pump_inner(false)
+}
+
+pub(crate) fn pump_frame() -> u32 {
+    pump_inner(true)
+}
+
+fn pump_inner(draw_frame: bool) -> u32 {
     if !on_ui_thread() {
         log(
             hilog::LOG_WARN,
             "GPUI pump rejected off ArkUI thread".into(),
         );
+        return 0;
+    }
+    if !frame::is_active() {
         return 0;
     }
     let Some(dispatcher) = RUNTIME.with(|slot| {
@@ -334,6 +346,16 @@ pub(crate) fn pump() -> u32 {
         events += 1;
     }
     let drained = dispatcher.drain() as u32;
-    window::pump_frames();
+    if draw_frame {
+        window::pump_frames();
+    }
+    if HOST_EVENTS
+        .lock()
+        .ok()
+        .is_some_and(|queue| !queue.is_empty())
+        || dispatcher.has_pending()
+    {
+        frame::wake();
+    }
     events + drained
 }

@@ -1,9 +1,10 @@
 import { UIAbility } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import nativeProbe from 'libgpui_mobile_counter.so';
 
 const DOMAIN = 0x0000;
-const TAG = 'GPUI_M3_1';
+const TAG = 'GPUI_M4_2';
 
 export default class EntryAbility extends UIAbility {
   onWindowStageCreate(windowStage: window.WindowStage): void {
@@ -14,5 +15,13 @@ export default class EntryAbility extends UIAbility {
         hilog.info(DOMAIN, TAG, 'loadContent succeeded');
       }
     });
+  }
+
+  onBackground(): void {
+    nativeProbe.gpuiPause();
+  }
+
+  onForeground(): void {
+    nativeProbe.gpuiResume();
   }
 }

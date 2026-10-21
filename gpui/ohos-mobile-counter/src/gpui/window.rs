@@ -1,4 +1,4 @@
-//! XComponent window facade and current polling-based frame delivery.
+//! XComponent window facade and SDK frame callback delivery.
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -13,6 +13,7 @@ use raw_window_handle::{
     RawWindowHandle, WindowHandle,
 };
 
+use crate::host::frame;
 use crate::host::logging::log;
 use crate::host::surface::{self, SurfaceSnapshot};
 use crate::sdk_ffi::{display, hilog};
@@ -135,13 +136,15 @@ pub(crate) fn dispatch_touch(input: TouchInput) -> bool {
     if state.input.is_none() {
         state.input = Some(callback);
     }
-    log(
-        hilog::LOG_INFO,
-        format!(
-            "GPUI touch dispatched generation={} id={} phase={:?} px=({:.1},{:.1}) logical=({:.1},{:.1}) density={:.2}",
-            input.generation, id.0, input.phase, input.x_pixels, input.y_pixels, x, y, density
-        ),
-    );
+    if input.phase != TouchPhase::Moved {
+        log(
+            hilog::LOG_INFO,
+            format!(
+                "GPUI touch dispatched generation={} id={} phase={:?} px=({:.1},{:.1}) logical=({:.1},{:.1}) density={:.2}",
+                input.generation, id.0, input.phase, input.x_pixels, input.y_pixels, x, y, density
+            ),
+        );
+    }
     true
 }
 
@@ -296,6 +299,13 @@ impl PlatformWindow for OhosWindow {
     }
     fn on_request_frame(&self, callback: Box<dyn FnMut(RequestFrameOptions)>) {
         self.callbacks.borrow_mut().request_frame = Some(callback);
+    }
+    fn frame_waker(&self) -> Option<Rc<dyn Fn()>> {
+        let generation = self.snapshot.generation;
+        Some(Rc::new(move || frame::wake_for(generation)))
+    }
+    fn schedule_frame(&self) {
+        frame::wake_for(self.snapshot.generation);
     }
     fn on_input(&self, callback: Box<dyn FnMut(PlatformInput) -> DispatchEventResult>) {
         self.callbacks.borrow_mut().input = Some(callback);

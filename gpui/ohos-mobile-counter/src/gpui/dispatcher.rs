@@ -39,6 +39,13 @@ impl Dispatcher {
     pub(crate) fn on_main_thread(&self) -> bool {
         self.is_main_thread()
     }
+
+    pub(crate) fn has_pending(&self) -> bool {
+        self.main_queue
+            .lock()
+            .ok()
+            .is_some_and(|queue| !queue.is_empty())
+    }
 }
 
 impl PlatformDispatcher for Dispatcher {

@@ -4,7 +4,7 @@ import { window } from '@kit.ArkUI';
 import nativeProbe from 'libgpui_mobile_counter.so';
 
 const DOMAIN = 0x0000;
-const TAG = 'GPUI_M4_1';
+const TAG = 'GPUI_M4_2';
 
 @Entry
 @Component
@@ -21,10 +21,14 @@ struct Index {
     hilog.info(DOMAIN, TAG, 'Rust probe bits: %{public}d', bits);
     const started: number = nativeProbe.gpuiStart();
     this.gpuiStatus = `GPUI embedded: ${started === 1 ? 'started' : 'failed'}`;
-    this.pumpTimer = setInterval(() => { nativeProbe.gpuiPump(); }, 50);
+    nativeProbe.gpuiResume();
+    // Low-frequency safety drain for Surface destruction and background GPUI
+    // tasks; drawing itself is driven by the XComponent frame callback.
+    this.pumpTimer = setInterval(() => { nativeProbe.gpuiPump(); }, 250);
   }
 
   aboutToDisappear(): void {
+    nativeProbe.gpuiPause();
     if (this.pumpTimer !== -1) {
       clearInterval(this.pumpTimer);
       this.pumpTimer = -1;
@@ -44,7 +48,7 @@ struct Index {
 
   build() {
     Column() {
-      Text('GPUI mobile host: M4-1')
+      Text('GPUI mobile host: M4-2')
         .fontSize(20)
       Text(this.probeResult)
         .fontSize(16)
