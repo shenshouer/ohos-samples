@@ -1,6 +1,6 @@
 # GPUI 计数器鸿蒙迁移：任务与验证记录
 
-状态：桌面基线、M0、M1-1、M1-2、M1-2A、M1-3、M2-1、M2-2、R-1、M3-1 和 M3-1A 均完成，M3-2 尚未开始。真机已显示 Rust/系统 Native Drawing 绘制的背景与圆角矩形，并在 M3-1 验证 GPUI 嵌入启动、窗口创建/重建、主线程宿主事件队列、尺寸变化和前台任务调度。M3-1A 的纯命名整理已完成构建，未重新真机运行；改名操作见 [记录](m3-1a-module-rename.md)。技术边界与验收见 [requirements.md](requirements.md)。
+状态：桌面基线至 M3-3 均完成。M3-3 真机已显示 GPUI 产生的计数器背景、三个按钮及系统字体文字；原始 Scene 为 4 个 Quad、19 个单色 Sprite。计数器触摸交互与帧调度仍待 M4。技术边界与验收见 [requirements.md](requirements.md)。
 
 ## 已完成：桌面基线与 SDK 静态核对
 
@@ -35,8 +35,8 @@
 
 - [x] **M3-1** 实现内部 GPUI 平台模块的 `Platform`、`PlatformWindow`、调度器、显示/密度、窗口句柄与宿主事件队列；接入 `Application::with_platform`/`run_embedded`，真机验证启动、窗口代次、主线程队列、无回调重入及非 UI 线程拒绝，详见 [记录](m3-1-platform.md)。
 - [x] **M3-1A** 按用户要求将内部源码模块 `gpui_ohos` 改为 `gpui`，处理与上游 crate 的同名引用，更新文档并构建复核；不改变 Cargo package 名和对外 Node-API，见 [记录](m3-1a-module-rename.md)。
-- [ ] **M3-2** 实现 `Scene::batches()` → Native Drawing：先画背景/矩形/圆角/边框/裁剪，再做自有 `PlatformAtlas` 和单色字形；记录此计数器实际产生的图元清单及缺口。
-- [ ] **M3-3** 实现最小 `PlatformTextSystem`：系统字体、度量、字形布局/光栅化与 Atlas，显示 `GPUI Counter`、数字、`−` 和 `Reset`；与桌面基线比较布局。
+- [x] **M3-2** 实现 `Scene::batches()` → Native Drawing 的纯色 Quad、统一圆角/边框、矩形裁剪与自有单色 Atlas/Sprite。真机计数器布局的原始 Scene 为 `quads (4)`；固定诊断字形追加后 Flush 为 4 个 Quad、1 个单色 Sprite。Resize、Hide/Show 后重绘通过；真实系统字体和交互仍待 M3-3/M4。详见 [M3-2 记录](m3-2-scene.md)。
+- [x] **M3-3** 实现最小 `PlatformTextSystem`：系统字体、度量、字形布局/光栅化与 Atlas，真机显示 `GPUI Counter`、数字、`−`、`+` 和 `Reset`；与桌面基线样式作静态与画面比较。详见 [M3-3 记录](m3-3-text.md)。
 
 ## M4：交互、调度与验收
 

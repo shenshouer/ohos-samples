@@ -1,8 +1,8 @@
-//! XComponent window facade. Scene painting is introduced in M3-2.
+//! XComponent window facade and current polling-based frame delivery.
 
 use std::cell::{Cell, RefCell};
 use std::ptr::NonNull;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use std::sync::Arc;
 
 use crate::gpui_core::*;
@@ -12,8 +12,36 @@ use raw_window_handle::{
     RawWindowHandle, WindowHandle,
 };
 
+use crate::host::logging::log;
 use crate::host::surface::{self, SurfaceSnapshot};
-use crate::sdk_ffi::display;
+use crate::sdk_ffi::{display, hilog};
+
+use super::atlas::MonoAtlas;
+
+thread_local! {
+    static FRAME_WINDOWS: RefCell<Vec<(SurfaceSnapshot, Weak<RefCell<Callbacks>>)>> = const { RefCell::new(Vec::new()) };
+}
+
+pub(crate) fn pump_frames() {
+    let windows = FRAME_WINDOWS.with(|slot| {
+        let mut windows = slot.borrow_mut();
+        windows.retain(|(_, callbacks)| callbacks.strong_count() > 0);
+        windows.clone()
+    });
+    for (snapshot, callbacks) in windows {
+        let current = surface::snapshot().is_some_and(|current| {
+            current.window == snapshot.window && current.generation == snapshot.generation
+        });
+        if current && let Some(callbacks) = callbacks.upgrade() {
+            if let Some(callback) = callbacks.borrow_mut().request_frame.as_mut() {
+                callback(RequestFrameOptions {
+                    signal_source: FrameRequestSource::LocalSchedule,
+                    ..Default::default()
+                });
+            }
+        }
+    }
+}
 
 #[derive(Default)]
 struct Callbacks {
@@ -31,32 +59,22 @@ struct Callbacks {
     appearance: Option<Box<dyn FnMut()>>,
 }
 
-struct EmptyAtlas;
-impl PlatformAtlas for EmptyAtlas {
-    fn get_or_insert_with<'a>(
-        &self,
-        _key: AtlasKey,
-        _build: &mut dyn FnMut()
-            -> Result<Option<(Size<DevicePixels>, std::borrow::Cow<'a, [u8]>)>>,
-    ) -> Result<Option<AtlasTile>> {
-        Err(crate::gpui_core::private::anyhow::anyhow!(
-            "atlas pending M3-2"
-        ))
-    }
-    fn remove(&self, _key: &AtlasKey) {}
-}
-
 pub(crate) struct OhosWindow {
     snapshot: SurfaceSnapshot,
     display: Rc<dyn PlatformDisplay>,
     size: Cell<Size<Pixels>>,
     input_handler: RefCell<Option<PlatformInputHandler>>,
-    callbacks: RefCell<Callbacks>,
-    atlas: Arc<EmptyAtlas>,
+    callbacks: Rc<RefCell<Callbacks>>,
+    atlas: Arc<MonoAtlas>,
 }
 
 impl OhosWindow {
     pub(crate) fn new(snapshot: SurfaceSnapshot, display: Rc<dyn PlatformDisplay>) -> Self {
+        let callbacks = Rc::new(RefCell::new(Callbacks::default()));
+        FRAME_WINDOWS.with(|slot| {
+            slot.borrow_mut()
+                .push((snapshot, Rc::downgrade(&callbacks)));
+        });
         Self {
             snapshot,
             display,
@@ -65,8 +83,8 @@ impl OhosWindow {
                 size(px(width), px(height))
             }),
             input_handler: RefCell::new(None),
-            callbacks: RefCell::new(Callbacks::default()),
-            atlas: Arc::new(EmptyAtlas),
+            callbacks,
+            atlas: Arc::new(MonoAtlas::default()),
         }
     }
 
@@ -209,7 +227,19 @@ impl PlatformWindow for OhosWindow {
     fn on_appearance_changed(&self, callback: Box<dyn FnMut()>) {
         self.callbacks.borrow_mut().appearance = Some(callback);
     }
-    fn draw(&self, _scene: &Scene) {}
+    fn draw(&self, scene: &Scene) {
+        let batches = scene
+            .batches()
+            .map(|batch| batch.label())
+            .collect::<Vec<_>>();
+        log(
+            hilog::LOG_INFO,
+            format!("GPUI source Scene batches: {}", batches.join(", ")),
+        );
+        if let Err(error) = surface::draw_scene(self.snapshot, scene, &self.atlas) {
+            log(hilog::LOG_ERROR, format!("GPUI Scene draw failed: {error}"));
+        }
+    }
     fn sprite_atlas(&self) -> Arc<dyn PlatformAtlas> {
         self.atlas.clone()
     }

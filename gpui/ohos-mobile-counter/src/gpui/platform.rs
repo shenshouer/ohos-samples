@@ -12,6 +12,7 @@ use futures::channel::oneshot;
 use uuid::Uuid;
 
 use super::dispatcher::Dispatcher;
+use super::text::OhosTextSystem;
 use super::window::OhosWindow;
 use crate::host::surface;
 use crate::sdk_ffi::display;
@@ -44,6 +45,7 @@ pub(crate) struct OhosPlatform {
     dispatcher: Arc<Dispatcher>,
     display_changed: RefCell<Option<Box<dyn FnMut()>>>,
     clipboard: RefCell<Option<ClipboardItem>>,
+    text_system: Arc<OhosTextSystem>,
 }
 
 impl OhosPlatform {
@@ -52,6 +54,7 @@ impl OhosPlatform {
             dispatcher,
             display_changed: RefCell::new(None),
             clipboard: RefCell::new(None),
+            text_system: Arc::new(OhosTextSystem),
         }
     }
 
@@ -108,7 +111,7 @@ impl Platform for OhosPlatform {
         ForegroundExecutor::new(self.dispatcher.clone())
     }
     fn text_system(&self) -> Arc<dyn PlatformTextSystem> {
-        Arc::new(NoopTextSystem::new())
+        self.text_system.clone()
     }
     fn run(&self, on_finish_launching: Box<dyn FnOnce()>) {
         on_finish_launching();

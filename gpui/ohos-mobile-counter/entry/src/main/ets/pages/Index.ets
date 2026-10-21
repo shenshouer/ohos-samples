@@ -4,7 +4,7 @@ import { window } from '@kit.ArkUI';
 import nativeProbe from 'libgpui_mobile_counter.so';
 
 const DOMAIN = 0x0000;
-const TAG = 'GPUI_M3_1';
+const TAG = 'GPUI_M3_3';
 
 @Entry
 @Component
@@ -44,7 +44,7 @@ struct Index {
 
   build() {
     Column() {
-      Text('GPUI mobile host: M3-1')
+      Text('GPUI mobile host: M3-3')
         .fontSize(20)
       Text(this.probeResult)
         .fontSize(16)

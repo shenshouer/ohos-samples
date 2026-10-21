@@ -3,10 +3,12 @@
 use std::ffi::c_void;
 use std::sync::Mutex;
 
+use crate::gpui::atlas::MonoAtlas;
 use crate::gpui::{self, SurfaceEvent};
+use crate::gpui_core::Scene;
 use crate::host::logging::log;
 use crate::host::touch;
-use crate::render::probe::ProbeDrawing;
+use crate::render::screen::ScreenDrawing;
 use crate::sdk_ffi::{drawing, hilog, native_window, xcomponent as xc};
 
 #[derive(Default)]
@@ -18,7 +20,7 @@ struct SurfaceState {
     height: u64,
     pixel_width: i32,
     pixel_height: i32,
-    drawing: Option<ProbeDrawing>,
+    drawing: Option<ScreenDrawing>,
 }
 
 static STATE: Mutex<SurfaceState> = Mutex::new(SurfaceState {
@@ -62,6 +64,35 @@ pub(crate) fn snapshot() -> Option<SurfaceSnapshot> {
             pixel_height: state.pixel_height,
         },
     )
+}
+
+pub(crate) fn draw_scene(
+    expected: SurfaceSnapshot,
+    scene: &Scene,
+    atlas: &MonoAtlas,
+) -> crate::gpui_core::Result<()> {
+    let mut state = STATE
+        .lock()
+        .map_err(|_| crate::gpui_core::private::anyhow::anyhow!("surface state lock poisoned"))?;
+    if state.window != expected.window || state.generation != expected.generation {
+        return Err(crate::gpui_core::private::anyhow::anyhow!(
+            "scene draw rejected for stale Surface"
+        ));
+    }
+    let drawing = state
+        .drawing
+        .as_mut()
+        .ok_or_else(|| crate::gpui_core::private::anyhow::anyhow!("Drawing surface unavailable"))?;
+    let stats = drawing.paint_scene(scene, atlas)?;
+    drop(state);
+    log(
+        hilog::LOG_INFO,
+        format!(
+            "GPUI Scene flush generation={} quads={} monochrome_glyphs={}",
+            expected.generation, stats.quads, stats.glyphs
+        ),
+    );
+    Ok(())
 }
 
 // The SDK accepts a pointer to this table. It must outlive every callback.
@@ -178,7 +209,7 @@ fn update_surface(kind: &str, component: *mut xc::XComponent, window: *mut c_voi
             Some((i32::try_from(width).ok()?, i32::try_from(height).ok()?))
         }),
     };
-    if let Ok((width, height)) = buffer_size {
+    if let Some((width, height)) = pixel_size {
         state.pixel_width = width;
         state.pixel_height = height;
     } else {
@@ -186,7 +217,7 @@ fn update_surface(kind: &str, component: *mut xc::XComponent, window: *mut c_voi
         state.pixel_height = 0;
     }
     let draw_result = pixel_size.map(|(width, height)| {
-        ProbeDrawing::create(window, width, height).map(|drawing| {
+        ScreenDrawing::create(window, width, height).map(|drawing| {
             state.drawing = Some(drawing);
             (width, height)
         })
@@ -222,7 +253,7 @@ fn update_surface(kind: &str, component: *mut xc::XComponent, window: *mut c_voi
         Some(Ok((width, height))) => log(
             hilog::LOG_INFO,
             format!(
-                "{kind}: Drawing flush ok generation={generation} pixels={width}x{height} old_released={old_drawing_released}"
+                "{kind}: Drawing Surface ready generation={generation} pixels={width}x{height} old_released={old_drawing_released}"
             ),
         ),
         Some(Err(error)) => log(

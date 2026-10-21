@@ -1,7 +1,9 @@
 //! GPUI's embedded OHOS platform. The host owns the UI loop and surface.
 
+pub(crate) mod atlas;
 mod dispatcher;
 mod platform;
+mod text;
 mod window;
 
 use std::cell::RefCell;
@@ -12,7 +14,7 @@ use std::thread::{self, ThreadId};
 
 use crate::gpui_core::{
     AnyWindowHandle, AppContext, Application, ApplicationHandle, Context, IntoElement, Platform,
-    Render, Window, WindowOptions, div, px, size,
+    Render, Window, WindowOptions, div, prelude::*, px, rgb, size,
 };
 
 use crate::host::logging::log;
@@ -33,6 +35,49 @@ struct BootstrapRoot;
 impl Render for BootstrapRoot {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .gap_4()
+            .bg(rgb(0xf4f6f8))
+            .text_color(rgb(0x20242a))
+            .child(div().text_xl().child("GPUI Counter"))
+            .child(div().text_3xl().child("0"))
+            .child(
+                div()
+                    .flex()
+                    .gap_3()
+                    .child(
+                        div()
+                            .id("decrement")
+                            .px_4()
+                            .py_2()
+                            .rounded_md()
+                            .bg(rgb(0xdce5ef))
+                            .child("−"),
+                    )
+                    .child(
+                        div()
+                            .id("increment")
+                            .px_4()
+                            .py_2()
+                            .rounded_md()
+                            .bg(rgb(0x2d6cdf))
+                            .text_color(rgb(0xffffff))
+                            .child("+"),
+                    )
+                    .child(
+                        div()
+                            .id("reset")
+                            .px_4()
+                            .py_2()
+                            .rounded_md()
+                            .bg(rgb(0xdce5ef))
+                            .child("Reset"),
+                    ),
+            )
     }
 }
 
@@ -186,6 +231,7 @@ pub(crate) fn pump() -> u32 {
                                 handle.update(cx, |_, window, _| {
                                     let (width, height) = snapshot.logical_dimensions();
                                     window.resize(size(px(width), px(height)));
+                                    window.refresh();
                                 })
                             });
                             if let Err(error) = resized {
@@ -244,5 +290,7 @@ pub(crate) fn pump() -> u32 {
         });
         events += 1;
     }
-    events + dispatcher.drain() as u32
+    let drained = dispatcher.drain() as u32;
+    window::pump_frames();
+    events + drained
 }

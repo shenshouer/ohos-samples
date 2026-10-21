@@ -1,3 +1,4 @@
-//! Drawing ownership and rendering strategies for the current probe.
+//! Native Drawing Surface ownership and GPUI Scene conversion.
 
-pub(crate) mod probe;
+pub(crate) mod scene;
+pub(crate) mod screen;
