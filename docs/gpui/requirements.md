@@ -1,6 +1,6 @@
 # GPUI 桌面计数器迁移到鸿蒙：需求与技术路线
 
-状态：桌面计数器已在 macOS arm64 上编译并交互验证；独立手机工程已完成 M0、M1、M2、R-1、M3-1、M3-1A、M3-2、M3-3、M4-1、M4-2 和 M4-3。GPUI 计数器文字与按钮、触摸 `Reset → + → −` 的 `0 → 1 → 0`、XComponent 按需帧、空闲/后台停帧及 Ability 退出清理均已在真机验证；M4-4 的 README 全面整理仍待完成。分阶段任务见 [tasks.md](tasks.md)，真机记录见 [M4-1 记录](m4-1-touch.md)、[M4-2 记录](m4-2-frame.md)、[M4-3 记录](m4-3-lifecycle.md)。
+状态：桌面计数器已在 macOS arm64 上编译并交互验证；独立手机工程已完成 M0、M1、M2、R-1、M3-1、M3-1A、M3-2、M3-3 和 M4-1 至 M4-4。GPUI 计数器文字与按钮、触摸 `Reset → + → −` 的 `0 → 1 → 0`、XComponent 按需帧、空闲/后台停帧及 Ability 退出清理均已在真机验证；M4-4 已完成 README 复现说明整理，未新增真机测试。分阶段任务见 [tasks.md](tasks.md)，真机记录见 [M4-1 记录](m4-1-touch.md)、[M4-2 记录](m4-2-frame.md)、[M4-3 记录](m4-3-lifecycle.md)，文档整理见 [M4-4 记录](m4-4-readme.md)。
 
 ## 目标与依赖边界
 
