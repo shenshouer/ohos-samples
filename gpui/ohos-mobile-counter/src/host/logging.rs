@@ -4,7 +4,7 @@ use std::ffi::CString;
 
 use crate::sdk_ffi::hilog;
 
-const TAG: &[u8] = b"GPUI_M2_2\0";
+const TAG: &[u8] = b"GPUI_M3_1\0";
 
 pub(crate) fn log(level: i32, message: String) {
     let Ok(message) = CString::new(message) else {
@@ -21,6 +21,6 @@ pub(crate) fn log(level: i32, message: String) {
         )
     };
     if result < 0 {
-        eprintln!("GPUI_M2_2: OH_LOG_PrintMsg failed: {result}");
+        eprintln!("GPUI_M3_1: OH_LOG_PrintMsg failed: {result}");
     }
 }

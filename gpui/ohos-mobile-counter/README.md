@@ -1,6 +1,6 @@
 # GPUI 鸿蒙手机计数器
 
-这是与 [`../desktop-counter/`](../desktop-counter/) 分离的手机端工程。已完成 **M0、M1-1、M1-2、M1-2A、M1-3、M2-1 和 M2-2**：运行时 Node-API 模块为纯 Rust `cdylib`；真机已验证 XComponent 生命周期、触摸回调和 Native Drawing 的屏幕绘制，包括前后台、横竖屏及 Surface 重建。触摸转发给 GPUI、GPUI 平台与 GPUI Scene 绘制仍未实现。
+这是与 [`../desktop-counter/`](../desktop-counter/) 分离的手机端工程。已完成 **M0、M1、M2、R-1 和 M3-1**：运行时 Node-API 模块为纯 Rust `cdylib`；真机已验证 XComponent 生命周期、触摸回调、Native Drawing 探针以及 GPUI 嵌入启动和窗口重建。GPUI Scene 绘制、文字和计数器交互仍待后续任务。
 
 - GPUI 官方源码固定提交：`c4a82ab1ab958aa43b0c0b15c0bad4fb77a7ca7f`；关闭默认 feature。`Cargo.lock` 锁定解析出的传递依赖。
 - Rust 目标：`aarch64-unknown-linux-ohos`。
@@ -14,8 +14,9 @@ M0 的逐项命令、结果和未验证事项见 [`../../docs/gpui/m0-validation
 
 | 目录 | 职责 |
 | --- | --- |
-| [`src/sdk_ffi/`](src/sdk_ffi/) | 只放 API 26 SDK C ABI 声明和最小返回值/窗口查询封装；Drawing 分错误码、GPU Surface、绘制对象，XComponent 分 Surface 与触摸。 |
+| [`src/sdk_ffi/`](src/sdk_ffi/) | 只放 API 26 SDK C ABI 声明和最小返回值/窗口查询封装；Drawing 分错误码、GPU Surface、绘制对象，XComponent 分 Surface 与触摸，Display 查询屏幕尺寸、密度和刷新率。 |
 | [`src/host/`](src/host/) | Node-API 模块入口、hiLog、XComponent 生命周期状态和触摸回调适配；回调中的窗口代次与旧资源释放由这里管理。 |
+| [`src/gpui/`](src/gpui/) | 自建 GPUI `Platform`、`PlatformWindow`、OHOS 窗口句柄、调度器及主线程宿主事件队列；代码中以 `gpui_core` 指代上游 crate。 |
 | [`src/render/`](src/render/) | 当前单帧 Drawing 探针及 GPU/Surface/图形对象的 RAII 所有权；后续 GPUI Scene 绘制在相应任务实现。 |
 | [`src/lib.rs`](src/lib.rs) | 模块装配与最小原生能力探针导出。 |
 
@@ -31,7 +32,11 @@ M1-2A 的 Rust-only Node-API 替换过程和真机结果见 [`../../docs/gpui/m1
 
 **M2-2 生命周期验证：** [`../../docs/gpui/m2-2-lifecycle.md`](../../docs/gpui/m2-2-lifecycle.md) 记录逐次操作和真机结果。新增 Landscape/Portrait 测试按钮使用系统窗口 API 触发方向变化；`GPUI_M2_2` 日志显示第一代和第二代 Surface 均按 `1260×1979 ↔ 2720×642` 重建 Drawing 并 Flush，横竖屏截图均显示完整画面。Hide/Show 后旧 Drawing 释放，新窗口与 `generation=2` 创建成功；Home 后返回仍显示画面，本机这轮没有触发后台 Surface 销毁。无需切换到 SDK NativeWindow 缓冲区或 EGL 备用路线。此阶段仍只是 Rust Drawing 探针，GPUI Scene 尚未接入。
 
-**M0-5 静态审计：** 鸿蒙 Rust 目标同时命中 Linux 条件编译；`gpui_platform` 会选择 Linux 桌面后端，因此本工程只依赖 GPUI 核心并将在 M3-1 自建平台实现。核心需要实现 Linux 条件下的 primary selection 方法；首版计数器不使用该功能。窗口悬停、键盘上下文和 Emoji 字体回退等行为还需在相应阶段验证。逐项位置、判断与命令见 [`../../docs/gpui/m0-5-audit.md`](../../docs/gpui/m0-5-audit.md)。
+**M0-5 静态审计：** 鸿蒙 Rust 目标同时命中 Linux 条件编译；`gpui_platform` 会选择 Linux 桌面后端，因此本工程只依赖 GPUI 核心，并在 M3-1 自建平台实现。核心需要实现 Linux 条件下的 primary selection 方法；首版计数器不使用该功能。窗口悬停、键盘上下文和 Emoji 字体回退等行为还需在相应阶段验证。逐项位置、判断与命令见 [`../../docs/gpui/m0-5-audit.md`](../../docs/gpui/m0-5-audit.md)。
+
+**M3-1 GPUI 平台：** [`../../docs/gpui/m3-1-platform.md`](../../docs/gpui/m3-1-platform.md) 记录逐次操作和真机结果。ArkTS 调用 `gpuiStart()`，Rust 用锁定 GPUI 的 `Application::with_platform(...).run_embedded(...)` 启动应用；XComponent 回调只入队，ArkUI 线程每 50 ms 调用 `gpuiPump()`，再打开、调整或关闭 GPUI 窗口。真机确认窗口创建、销毁与多次重建，前台任务在 `ThreadId(1)` 执行，专用工作线程的 pump 被拒绝并返回 `0`。SDK 显示接口实测 `1260×2720 px`、密度 `3.25`、刷新率动态为 `60` 或 `120 Hz`，NativeWindow 缓冲区 `1260×1918 px` 对应 GPUI 逻辑尺寸约 `387.69×590.15`。本阶段的空 GPUI 根视图不绘制 Scene，画面继续由现有 Native Drawing 探针呈现。`NoopTextSystem`、空 Atlas、50 ms 事件轮询仅为本阶段接口占位，分别由 M3-2、M3-3、M4-2 补齐。新增的 `futures`、`raw-window-handle`、`uuid` 是 GPUI trait 签名直接需要且已在锁定依赖图中的 crate，没有引入其他平台或渲染项目。
+
+**M3-1A 源码模块改名：** [`../../docs/gpui/m3-1a-module-rename.md`](../../docs/gpui/m3-1a-module-rename.md) 记录将内部 `src/gpui_ohos/` 改为 `src/gpui/`，上游 GPUI crate 在代码中别名为 `gpui_core`。Cargo package、HAP 原生库名和 Node-API 导出保持不变。格式、目标交叉检查、原生构建、签名 HAP 和包内 ELF 检查通过；此命名整理后的 HAP 尚未重新安装真机。
 
 **M0-4 预检与结论：** SDK aarch64 库导出计划使用的 Drawing、XComponent 和 Node-API 符号。真机先前拒绝执行放在 `/data/local/tmp` 的独立探针，并拒绝 SDK 测试签名 HAP；HarmonyOS 调试签名 HAP 安装后，应用日志 `Rust probe bits: 7` 已确认最小加载链。可复现 shell 探针源码在 [`probes/m0_library_load.c`](probes/m0_library_load.c)。
 
@@ -44,11 +49,11 @@ M1-2A 的 Rust-only Node-API 替换过程和真机结果见 [`../../docs/gpui/m1
 ```sh
 cargo fmt --check
 scripts/build-native.sh
-hvigorw --mode module -p module=entry@default -p product=default -p buildMode=debug assembleHap
+hvigorw --no-daemon --mode module -p module=entry@default -p product=default -p buildMode=debug assembleHap
 ```
 
-产物目录为 `entry/build/default/outputs/default/`。`scripts/build-native.sh` 使用 SDK 的目标 Clang 构建 Rust `cdylib` 并将其暂存到忽略的 `entry/libs/arm64-v8a/`。当前 HAP 仅包含一份 ELF64/AArch64 Rust 原生模块；其动态依赖有系统 `libace_napi.z.so`、`libace_ndk.z.so`、`libnative_window.so`、`libnative_drawing.so`、`libhilog_ndk.z.so`、`libc.so`，没有因 C++ 桥接而带入的 `libc++_shared.so`。未关联签名方案时仅生成 `entry-default-unsigned.hap`，DevEco 部署它会报 `9568320: no signature file`。
+产物目录为 `entry/build/default/outputs/default/`。`scripts/build-native.sh` 使用 SDK 的目标 Clang 构建 Rust `cdylib` 并将其暂存到忽略的 `entry/libs/arm64-v8a/`。当前 HAP 仅包含一份 ELF64/AArch64 Rust 原生模块；其动态依赖为系统 `libace_napi.z.so`、`libace_ndk.z.so`、`libnative_window.so`、`libnative_drawing.so`、`libnative_display_manager.so`、`libtime_service_ndk.so`、`libhilog_ndk.z.so` 和 `libc.so`，没有因 C++ 桥接而带入的 `libc++_shared.so`。未关联签名方案时仅生成 `entry-default-unsigned.hap`，DevEco 部署它会报 `9568320: no signature file`。
 
 首次配置时，复制 [`build-profile.example.json5`](build-profile.example.json5) 为本机 `build-profile.json5`。按 [Huawei DevEco 自动签名说明](https://developer.huawei.com/consumer/cn/doc/doccenter-deveco-studio/ide-signing-auto)，在本工程的 `File > Project Structure > Project > Signing Configs` 勾选 `Support HarmonyOS` 与 `Automatically generate signature`，为当前包名和设备取得调试材料。**再检查** `app.products` 中 `name: "default"` 的对象含 `"signingConfig": "default"`，且 `app.signingConfigs` 有同名方案；[Huawei 构建配置文档](https://developer.huawei.com/consumer/cn/doc/doccenter-deveco-studio/ide-hmos-hvigor-build-profile-app)说明缺少这一引用时默认不签名。含本机口令与路径的 `build-profile.json5` 已被 `.gitignore` 排除，密钥、证书、profile 和口令均不可提交。
 
-2026-10-21 修正该引用后，`entry-default-signed.hap` 通过 SDK 签名校验并由 `hdc install` 在真机安装成功。首次启动时手机锁屏返回 `10106102`；解锁后运行 `hdc shell aa start -a EntryAbility -b com.example.gpuiohosmobilecounter` 成功。当前版本可用 `hdc shell hilog -x -T GPUI_M2_2` 观察 Drawing、Surface 和触摸日志。已验证 ArkTS → Node-API → Rust → XComponent/Native Drawing 链，以及 M2-2 所列生命周期操作；GPUI 接入后仍需复验。
+2026-10-21 修正该引用后，`entry-default-signed.hap` 通过 SDK 签名校验并由 `hdc install` 在真机安装成功。首次启动时手机锁屏返回 `10106102`；解锁后运行 `hdc shell aa start -a EntryAbility -b com.example.gpuiohosmobilecounter` 成功。当前版本可用 `hdc shell hilog -x -T GPUI_M3_1` 观察 GPUI 启动、宿主队列、Drawing、Surface 和触摸日志。M3-1 真机结果见上文及阶段记录。

@@ -1,6 +1,10 @@
 //! HarmonyOS mobile counter: host adapters, SDK bindings and probe renderer.
 
 #[cfg(target_env = "ohos")]
+extern crate gpui as gpui_core;
+#[cfg(target_env = "ohos")]
+mod gpui;
+#[cfg(target_env = "ohos")]
 mod host;
 #[cfg(target_env = "ohos")]
 mod render;

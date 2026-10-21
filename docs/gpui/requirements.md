@@ -1,6 +1,6 @@
 # GPUI 桌面计数器迁移到鸿蒙：需求与技术路线
 
-状态：桌面计数器已在 macOS arm64 上编译并交互验证；独立手机工程已完成 M0、M1-1、M1-2、M1-2A、M1-3、M2-1、M2-2 和 R-1。系统 Native Drawing 的屏幕 Surface、纯色背景、圆角矩形及 Flush 已在真机显示；模块整理后前后台、横竖屏、尺寸变化、Surface 重建和触摸探针再次通过。GPUI 场景绘制和计数器交互尚未实现。分阶段任务见 [tasks.md](tasks.md)，最新操作与验证状态见 [R-1 记录](r-1-code-organization.md)。
+状态：桌面计数器已在 macOS arm64 上编译并交互验证；独立手机工程已完成 M0、M1、M2、R-1、M3-1 和 M3-1A。系统 Native Drawing 的屏幕 Surface、纯色背景、圆角矩形及 Flush 已在真机显示；GPUI 嵌入启动、窗口重建与宿主队列已在 M3-1 真机验证。M3-1A 仅改内部模块名，已构建但未重新安装真机。GPUI 场景绘制和计数器交互尚未实现。分阶段任务见 [tasks.md](tasks.md)，改名操作见 [M3-1A 记录](m3-1a-module-rename.md)。
 
 ## 目标与依赖边界
 
@@ -13,7 +13,7 @@
 ## 版本与工程边界
 
 - 当前桌面示例固定发布版 `gpui = 0.2.2`，使用 `Application::new()`，保持独立且不为手机适配修改。手机工程 `gpui/ohos-mobile-counter/` 固定官方源码提交 `c4a82ab1ab958aa43b0c0b15c0bad4fb77a7ca7f`，该源码提供 `Application::with_platform`/`run_embedded`；复用计数器视图时在手机工程内按此提交适配，不能把两个版本的 API 混用。
-- 手机工程后续增加最小 DevEco/HAP 宿主、`gpui_ohos` Rust 平台 crate、`sdk_ffi`、薄 Node-API 注册桥接和计数器视图。所有 SDK 路径、签名材料和本机配置均不提交。
+- 手机工程使用独立 DevEco/HAP 宿主、内部 `src/gpui/` Rust 平台模块、`sdk_ffi` 和薄 Node-API 注册桥接；计数器视图将在后续任务接入。所有 SDK 路径、签名材料和本机配置均不提交。
 - 本机已有 API 26 Native SDK 和 `aarch64-unknown-linux-ohos` Rust 目标。已连接手机为 `ALN-AL00`、OpenHarmony `7.0.0.105`、API 26、aarch64；此前拒绝 SDK 测试签名，现已接受并运行本工程 HarmonyOS 调试签名 HAP。M2-1 已确认 API 16 起的 Native Drawing 屏幕 Surface 接口可在此机创建、绘制和 Flush；M2-2 的前后台、横竖屏重绘及显式 Surface 重建亦通过。GPUI 到 Drawing 的映射仍未实现。
 - 鸿蒙 Rust 目标可能同时匹配 `target_os = "linux"` 与 `target_env = "ohos"`。编译阶段须关闭 GPUI 默认桌面 feature，逐项清理错误启用 X11/Wayland 等桌面路径的条件编译；必要时仅对固定 GPUI 源码维护可复现的最小补丁。
 

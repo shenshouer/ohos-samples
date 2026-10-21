@@ -26,3 +26,19 @@
 | 2026-10-21 | 6 | 暂存全部候选文件，检查暂存文件清单、统计和 `git diff --cached --check`；单独读取公开的 `build-profile.example.json5`。 | 默认沙箱无法写 `.git/index.lock`；在获准的 Git 索引写权限下 `git add -A` 成功。暂存 63 个源码、模板、资源及文档文件，差异检查通过；签名配置模板没有证书或口令。 |
 | 2026-10-21 | 7 | 用 `git commit` 创建当前项目首个本地提交。 | 提交成功，消息为 `Add GPUI desktop and HarmonyOS mobile samples`；包含 63 个已审查文件。 |
 | 2026-10-21 | 8 | 尝试向已配置的 `origin/main` 推送首个提交。 | 自动审批审查拒绝该 `git push`：远端的具体 GitHub 地址及包括文档在内的完整 payload 未得到明确确认。没有进行网络推送；已向用户请求对目的地和范围的明确授权。 |
+
+## 2026-10-21：推送 M3-1 与 M3-1A
+
+用户在这两个子任务完成后再次明确要求 `push`。本次目标为当前分支 `main` 推送至已有的 `origin`：`https://github.com/shenshouer/ohos-samples.git`。推送范围为初始提交及本轮 GPUI 手机平台接入、内部模块改名、关联文档和操作记录；签名材料、HAP 与本机构建产物不进入提交。
+
+| 日期 | 顺序 | 操作与目的 | 实际结果与验证状态 |
+| --- | --- | --- | --- |
+| 2026-10-21 | 1 | 推送前说明范围与验证路径；读取当前 `git status`、分支、远端、历史和忽略规则。 | 当前 `main` 仅有本地初始提交 `69e2116`，无上游跟踪分支；本轮 M3-1/M3-1A 尚未提交。`origin` 指向上述 GitHub 仓库。 |
+| 2026-10-21 | 2 | 清点未跟踪文件，检查敏感字段模式、项目 `.gitignore` 与被忽略的本机文件，并检查差异。 | 新文件仅为两个 M3 阶段记录、五个 Rust 源文件；敏感字段扫描只命中接口参数 `_password`，没有密钥或口令值。`build-profile.json5`、`entry/libs/` 与 `target/` 均被忽略。 |
+| 2026-10-21 | 3 | 执行 `git ls-remote --symref origin HEAD refs/heads/main`，核对推送前远端状态。 | 命令成功且未返回远端引用；`origin` 当前仍为空，推送不会覆盖远端 `main` 提交。 |
+| 2026-10-21 | 4 | 执行 `cargo fmt --check`、`cargo check --locked --offline --target aarch64-unknown-linux-ohos` 和 `git diff --check`。 | 三项均通过；M3-1A 阶段还已完成原生构建、签名 HAP 构建及包内 AArch64 ELF/动态依赖检查，改名后的 HAP 未重新真机运行。 |
+| 2026-10-21 | 5 | 暂存 `docs/agent-operations.md`、`docs/gpui/` 和 `gpui/ohos-mobile-counter/` 的本轮变更，执行 `git diff --cached --name-status`、`--stat`、`--check`。 | 暂存 21 个文件（新增 7 个、修改 14 个），均属 M3-1/M3-1A 代码及文档；没有签名材料和构建产物。暂存差异检查通过。 |
+| 2026-10-21 | 6 | 创建本地提交 `Add HarmonyOS GPUI platform and rename source module`。 | 提交成功，提交前的对象 ID 为 `ef1d950`，包含 21 个已核对文件。提交稍后仅为补入本条操作记录而在推送前修订；最终对象 ID 以 `git log` 为准。 |
+| 2026-10-21 | 7 | 执行 `git push -u origin main`，尝试将本地初始提交和 M3-1/M3-1A 提交推送到上述 GitHub `main`。 | 自动审批审查拒绝：虽然用户再次说“push”，但未在可信用户内容中明确确认此具体目的地及完整源码/文档 payload。没有进行网络推送，也不通过替代命令绕过；已提出含具体目的地和范围的确认问题，等待回复。 |
+
+当前仅完成本地提交，远端仍为空。收到用户对具体目的地与范围的明确确认后，才能再次尝试推送；本节不把未执行的推送记为成功。

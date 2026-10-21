@@ -1,6 +1,6 @@
 # GPUI 计数器鸿蒙迁移：任务与验证记录
 
-状态：桌面基线、M0、M1-1、M1-2、M1-2A、M1-3、M2-1、M2-2 和 R-1 均完成。真机已显示 Rust/系统 Native Drawing 绘制的背景与圆角矩形，并验证前后台、横竖屏、尺寸变化、Surface 重建及触摸探针；GPUI 场景绘制仍待后续任务。下一项为 M3-1，本次未实施。技术边界与验收见 [requirements.md](requirements.md)；本次操作见 [R-1 记录](r-1-code-organization.md)。本计划使用 SDK 自建 FFI。
+状态：桌面基线、M0、M1-1、M1-2、M1-2A、M1-3、M2-1、M2-2、R-1、M3-1 和 M3-1A 均完成，M3-2 尚未开始。真机已显示 Rust/系统 Native Drawing 绘制的背景与圆角矩形，并在 M3-1 验证 GPUI 嵌入启动、窗口创建/重建、主线程宿主事件队列、尺寸变化和前台任务调度。M3-1A 的纯命名整理已完成构建，未重新真机运行；改名操作见 [记录](m3-1a-module-rename.md)。技术边界与验收见 [requirements.md](requirements.md)。
 
 ## 已完成：桌面基线与 SDK 静态核对
 
@@ -33,7 +33,8 @@
 
 ## M3：GPUI 平台与绘制
 
-- [ ] **M3-1** 实现 `gpui_ohos` 的 `Platform`、`PlatformWindow`、调度器、显示/密度、窗口句柄与宿主事件队列；接入 `Application::with_platform`/`run_embedded`，验证无回调重入与跨线程误用。
+- [x] **M3-1** 实现内部 GPUI 平台模块的 `Platform`、`PlatformWindow`、调度器、显示/密度、窗口句柄与宿主事件队列；接入 `Application::with_platform`/`run_embedded`，真机验证启动、窗口代次、主线程队列、无回调重入及非 UI 线程拒绝，详见 [记录](m3-1-platform.md)。
+- [x] **M3-1A** 按用户要求将内部源码模块 `gpui_ohos` 改为 `gpui`，处理与上游 crate 的同名引用，更新文档并构建复核；不改变 Cargo package 名和对外 Node-API，见 [记录](m3-1a-module-rename.md)。
 - [ ] **M3-2** 实现 `Scene::batches()` → Native Drawing：先画背景/矩形/圆角/边框/裁剪，再做自有 `PlatformAtlas` 和单色字形；记录此计数器实际产生的图元清单及缺口。
 - [ ] **M3-3** 实现最小 `PlatformTextSystem`：系统字体、度量、字形布局/光栅化与 Atlas，显示 `GPUI Counter`、数字、`−` 和 `Reset`；与桌面基线比较布局。
 

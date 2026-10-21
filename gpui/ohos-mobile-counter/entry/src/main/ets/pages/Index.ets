@@ -4,7 +4,7 @@ import { window } from '@kit.ArkUI';
 import nativeProbe from 'libgpui_mobile_counter.so';
 
 const DOMAIN = 0x0000;
-const TAG = 'GPUI_M2_2';
+const TAG = 'GPUI_M3_1';
 
 @Entry
 @Component
@@ -12,11 +12,23 @@ struct Index {
   @State probeResult: string = 'waiting';
   @State showSurface: boolean = true;
   @State narrowSurface: boolean = false;
+  @State gpuiStatus: string = 'starting';
+  private pumpTimer: number = -1;
 
   aboutToAppear(): void {
     const bits: number = nativeProbe.probe();
     this.probeResult = `probe bits: ${bits}`;
     hilog.info(DOMAIN, TAG, 'Rust probe bits: %{public}d', bits);
+    const started: number = nativeProbe.gpuiStart();
+    this.gpuiStatus = `GPUI embedded: ${started === 1 ? 'started' : 'failed'}`;
+    this.pumpTimer = setInterval(() => { nativeProbe.gpuiPump(); }, 50);
+  }
+
+  aboutToDisappear(): void {
+    if (this.pumpTimer !== -1) {
+      clearInterval(this.pumpTimer);
+      this.pumpTimer = -1;
+    }
   }
 
   private async changeOrientation(landscape: boolean): Promise<void> {
@@ -32,9 +44,11 @@ struct Index {
 
   build() {
     Column() {
-      Text('GPUI mobile host: M2-2')
+      Text('GPUI mobile host: M3-1')
         .fontSize(20)
       Text(this.probeResult)
+        .fontSize(16)
+      Text(this.gpuiStatus)
         .fontSize(16)
       Button(this.showSurface ? 'Hide Surface' : 'Show Surface')
         .onClick(() => { this.showSurface = !this.showSurface; })

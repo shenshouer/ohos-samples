@@ -3,6 +3,7 @@
 use std::ffi::c_void;
 use std::sync::Mutex;
 
+use crate::gpui::{self, SurfaceEvent};
 use crate::host::logging::log;
 use crate::host::touch;
 use crate::render::probe::ProbeDrawing;
@@ -15,6 +16,8 @@ struct SurfaceState {
     generation: u64,
     width: u64,
     height: u64,
+    pixel_width: i32,
+    pixel_height: i32,
     drawing: Option<ProbeDrawing>,
 }
 
@@ -24,8 +27,42 @@ static STATE: Mutex<SurfaceState> = Mutex::new(SurfaceState {
     generation: 0,
     width: 0,
     height: 0,
+    pixel_width: 0,
+    pixel_height: 0,
     drawing: None,
 });
+
+#[derive(Clone, Copy)]
+pub(crate) struct SurfaceSnapshot {
+    pub(crate) window: usize,
+    pub(crate) generation: u64,
+    pub(crate) pixel_width: i32,
+    pub(crate) pixel_height: i32,
+}
+
+impl SurfaceSnapshot {
+    pub(crate) fn logical_dimensions(self) -> (f32, f32) {
+        let density = crate::sdk_ffi::display::default_display()
+            .map(|info| info.density)
+            .unwrap_or(1.0);
+        (
+            self.pixel_width as f32 / density,
+            self.pixel_height as f32 / density,
+        )
+    }
+}
+
+pub(crate) fn snapshot() -> Option<SurfaceSnapshot> {
+    let state = STATE.lock().ok()?;
+    (state.window != 0 && state.pixel_width > 0 && state.pixel_height > 0).then_some(
+        SurfaceSnapshot {
+            window: state.window,
+            generation: state.generation,
+            pixel_width: state.pixel_width,
+            pixel_height: state.pixel_height,
+        },
+    )
+}
 
 // The SDK accepts a pointer to this table. It must outlive every callback.
 static mut CALLBACKS: xc::Callbacks = xc::Callbacks {
@@ -65,6 +102,8 @@ pub fn register(component: *mut xc::XComponent) {
     state.window = 0;
     state.width = 0;
     state.height = 0;
+    state.pixel_width = 0;
+    state.pixel_height = 0;
     drop(state);
     // SAFETY: component comes from napi_unwrap of the SDK-owned XComponent;
     // CALLBACKS is process-lifetime storage.
@@ -76,6 +115,8 @@ pub fn register(component: *mut xc::XComponent) {
                 state.window = 0;
                 state.width = 0;
                 state.height = 0;
+                state.pixel_width = 0;
+                state.pixel_height = 0;
                 state.drawing = None;
             }
         }
@@ -137,6 +178,13 @@ fn update_surface(kind: &str, component: *mut xc::XComponent, window: *mut c_voi
             Some((i32::try_from(width).ok()?, i32::try_from(height).ok()?))
         }),
     };
+    if let Ok((width, height)) = buffer_size {
+        state.pixel_width = width;
+        state.pixel_height = height;
+    } else {
+        state.pixel_width = 0;
+        state.pixel_height = 0;
+    }
     let draw_result = pixel_size.map(|(width, height)| {
         ProbeDrawing::create(window, width, height).map(|drawing| {
             state.drawing = Some(drawing);
@@ -144,6 +192,11 @@ fn update_surface(kind: &str, component: *mut xc::XComponent, window: *mut c_voi
         })
     });
     drop(state);
+    gpui::enqueue_surface(if kind == "created" {
+        SurfaceEvent::Created(generation)
+    } else {
+        SurfaceEvent::Changed(generation)
+    });
     match size {
         Ok((width, height)) => log(
             hilog::LOG_INFO,
@@ -208,7 +261,10 @@ unsafe extern "C" fn on_destroyed(component: *mut xc::XComponent, window: *mut c
     state.window = 0;
     state.width = 0;
     state.height = 0;
+    state.pixel_width = 0;
+    state.pixel_height = 0;
     drop(state);
+    gpui::enqueue_surface(SurfaceEvent::Destroyed(generation));
     log(
         hilog::LOG_INFO,
         format!(

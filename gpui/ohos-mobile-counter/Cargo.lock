@@ -831,7 +831,10 @@ dependencies = [
 name = "gpui-ohos-mobile-counter"
 version = "0.1.0"
 dependencies = [
+ "futures",
  "gpui",
+ "raw-window-handle",
+ "uuid",
 ]
 
 [[package]]

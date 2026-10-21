@@ -3,12 +3,15 @@
 use std::ffi::c_void;
 use std::ptr::{null, null_mut};
 
+use crate::gpui;
 use crate::host::{logging, surface};
 use crate::sdk_ffi::napi::{CallbackInfo, Env, Module, PropertyDescriptor, Value};
 use crate::sdk_ffi::{hilog, napi, xcomponent};
 
 const MODULE_NAME: &str = "gpui_mobile_counter\0";
 const PROBE_NAME: &str = "probe\0";
+const GPUI_START_NAME: &str = "gpuiStart\0";
+const GPUI_PUMP_NAME: &str = "gpuiPump\0";
 const XCOMPONENT_OBJECT_NAME: &str = "__NATIVE_XCOMPONENT_OBJ__\0";
 
 unsafe extern "C" fn probe(env: Env, _info: CallbackInfo) -> Value {
@@ -20,6 +23,24 @@ unsafe extern "C" fn probe(env: Env, _info: CallbackInfo) -> Value {
         return null_mut();
     }
     value
+}
+
+unsafe extern "C" fn gpui_start(env: Env, _info: CallbackInfo) -> Value {
+    uint32(env, gpui::start())
+}
+
+unsafe extern "C" fn gpui_pump(env: Env, _info: CallbackInfo) -> Value {
+    uint32(env, gpui::pump())
+}
+
+fn uint32(env: Env, result: u32) -> Value {
+    let mut value = null_mut();
+    // SAFETY: Node-API owns env; value is writable for the duration of this call.
+    if unsafe { napi::napi_create_uint32(env, result, &mut value) } == napi::OK {
+        value
+    } else {
+        null_mut()
+    }
 }
 
 unsafe extern "C" fn init(env: Env, exports: Value) -> Value {
@@ -52,19 +73,26 @@ unsafe extern "C" fn init(env: Env, exports: Value) -> Value {
             format!("init: XComponent property unavailable status={property_status}"),
         );
     }
-    let property = PropertyDescriptor {
-        utf8name: PROBE_NAME.as_ptr().cast(),
+    let property = |name: &'static str, method| PropertyDescriptor {
+        utf8name: name.as_ptr().cast(),
         name: null_mut(),
-        method: Some(probe),
+        method,
         getter: None,
         setter: None,
         value: null_mut(),
         attributes: napi::DEFAULT,
         data: null_mut(),
     };
+    let properties = [
+        property(PROBE_NAME, Some(probe)),
+        property(GPUI_START_NAME, Some(gpui_start)),
+        property(GPUI_PUMP_NAME, Some(gpui_pump)),
+    ];
     // SAFETY: `exports` and `env` are provided by Node-API. The descriptor
     // remains live until this synchronous call returns.
-    if unsafe { napi::napi_define_properties(env, exports, 1, &property) } != napi::OK {
+    if unsafe { napi::napi_define_properties(env, exports, properties.len(), properties.as_ptr()) }
+        != napi::OK
+    {
         return null_mut();
     }
     exports

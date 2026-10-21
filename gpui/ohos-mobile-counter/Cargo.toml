@@ -9,3 +9,6 @@ crate-type = ["cdylib"]
 
 [dependencies]
 gpui = { git = "https://github.com/zed-industries/zed.git", rev = "c4a82ab1ab958aa43b0c0b15c0bad4fb77a7ca7f", default-features = false }
+futures = "0.3.34"
+raw-window-handle = "0.6.2"
+uuid = "1.28.0"
