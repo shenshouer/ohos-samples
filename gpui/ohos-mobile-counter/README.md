@@ -1,6 +1,6 @@
 # GPUI 鸿蒙手机计数器
 
-这是与 [`../desktop-counter/`](../desktop-counter/) 分离的手机端工程。已完成 **M0、M1、M2、R-1、M3-1、M3-1A、M3-2 和 M3-3**：运行时 Node-API 模块为纯 Rust `cdylib`；真机已验证 XComponent 生命周期、GPUI 嵌入启动，以及 GPUI Scene 的计数器背景、三个按钮和系统字体文字。触摸交互与帧调度仍待 M4。
+这是与 [`../desktop-counter/`](../desktop-counter/) 分离的手机端工程。已完成 **M0、M1、M2、R-1、M3-1、M3-1A、M3-2、M3-3 和 M4-1**：运行时 Node-API 模块为纯 Rust `cdylib`；真机已验证 XComponent 生命周期、GPUI 计数器文字和按钮，以及 `Reset → + → −` 的 `0 → 1 → 0` 交互。按需帧调度仍待 M4-2。
 
 - GPUI 官方源码固定提交：`c4a82ab1ab958aa43b0c0b15c0bad4fb77a7ca7f`；关闭默认 feature。`Cargo.lock` 锁定解析出的传递依赖。
 - Rust 目标：`aarch64-unknown-linux-ohos`。
@@ -40,7 +40,9 @@ M1-2A 的 Rust-only Node-API 替换过程和真机结果见 [`../../docs/gpui/m1
 
 **M3-2 Scene 绘制历史：** [`../../docs/gpui/m3-2-scene.md`](../../docs/gpui/m3-2-scene.md) 记录当时 SDK FFI、构建与真机结果。当时 `NoopTextSystem` 不产生真实字形，另追加固定 `A` 掩码验证 Atlas。该诊断字形已在 M3-3 移除。现有 Scene 绘制仍只支持纯色背景、统一圆角/边框、矩形裁剪及单色 Sprite；其他图元会明确报错。
 
-**M3-3 系统文字：** [`../../docs/gpui/m3-3-text.md`](../../docs/gpui/m3-3-text.md) 记录 API 26 Native Drawing 字体 FFI 与真机结果。`src/gpui/text.rs` 实现计数器所需的系统默认字体度量、逐字符布局、字形边界和 Alpha8 光栅化；字形经 GPUI 原始 Scene 和自有 Atlas 绘制。真机显示 `GPUI Counter`、`0`、`−`、`+`、`Reset`，日志为 4 个 Quad、19 个单色 Sprite，Flush 成功。布局使用与桌面基线相同的 GPUI `gap_4`、字号、内边距与颜色；手机 Surface 尺寸不同，未作同分辨率像素差比较。当前未支持复杂文字 shaping、字体回退和自定义字体；三个按钮仍未接入 GPUI 触摸事件，数字固定为 `0`。
+**M3-3 系统文字：** [`../../docs/gpui/m3-3-text.md`](../../docs/gpui/m3-3-text.md) 记录 API 26 Native Drawing 字体 FFI 与真机结果。`src/gpui/text.rs` 实现计数器所需的系统默认字体度量、逐字符布局、字形边界和 Alpha8 光栅化；字形经 GPUI 原始 Scene 和自有 Atlas 绘制。真机显示 `GPUI Counter`、`0`、`−`、`+`、`Reset`，日志为 4 个 Quad、19 个单色 Sprite，Flush 成功。布局使用与桌面基线相同的 GPUI `gap_4`、字号、内边距与颜色；手机 Surface 尺寸不同，未作同分辨率像素差比较。当前未支持复杂文字 shaping、字体回退和自定义字体；M3-3 当时尚无触摸交互。
+
+**M4-1 触摸交互：** [`../../docs/gpui/m4-1-touch.md`](../../docs/gpui/m4-1-touch.md) 记录 SDK 触摸读取、Surface 代次排队、密度换算和 GPUI `Touch` 分发。`+`、`−`、`Reset` 的数值变化仅在 GPUI Rust 视图的点击回调中发生。aarch64 原生构建、签名 HAP 构建与安装通过；真机受控点击 `Reset → + → −` 显示 `0 → 1 → 0`，截图确认数字 `1`，从 `+` 拖出后未误点击。系统 `Cancel` 事件映射已实现，尚未由真机触发验证。2026-10-21 延迟追查中，受控点击从 SDK 抬起到计数回调约 45 ms、到 Drawing Flush 约 53 ms；手动点击日志同样未见秒级处理延迟。当前仍使用 50 ms ArkTS 轮询；Flush 后的屏幕实际呈现时间尚未测量，用户报告的偶发秒级视觉延迟未定位。
 
 **M0-4 预检与结论：** SDK aarch64 库导出计划使用的 Drawing、XComponent 和 Node-API 符号。真机先前拒绝执行放在 `/data/local/tmp` 的独立探针，并拒绝 SDK 测试签名 HAP；HarmonyOS 调试签名 HAP 安装后，应用日志 `Rust probe bits: 7` 已确认最小加载链。可复现 shell 探针源码在 [`probes/m0_library_load.c`](probes/m0_library_load.c)。
 
@@ -60,4 +62,4 @@ hvigorw --no-daemon --mode module -p module=entry@default -p product=default -p 
 
 首次配置时，复制 [`build-profile.example.json5`](build-profile.example.json5) 为本机 `build-profile.json5`。按 [Huawei DevEco 自动签名说明](https://developer.huawei.com/consumer/cn/doc/doccenter-deveco-studio/ide-signing-auto)，在本工程的 `File > Project Structure > Project > Signing Configs` 勾选 `Support HarmonyOS` 与 `Automatically generate signature`，为当前包名和设备取得调试材料。**再检查** `app.products` 中 `name: "default"` 的对象含 `"signingConfig": "default"`，且 `app.signingConfigs` 有同名方案；[Huawei 构建配置文档](https://developer.huawei.com/consumer/cn/doc/doccenter-deveco-studio/ide-hmos-hvigor-build-profile-app)说明缺少这一引用时默认不签名。含本机口令与路径的 `build-profile.json5` 已被 `.gitignore` 排除，密钥、证书、profile 和口令均不可提交。
 
-2026-10-21 修正该引用后，`entry-default-signed.hap` 通过 SDK 签名校验并由 `hdc install` 在真机安装成功。首次启动时手机锁屏返回 `10106102`；解锁后运行 `hdc shell aa start -a EntryAbility -b com.example.gpuiohosmobilecounter` 成功。当前版本可用 `hdc shell hilog -x -T GPUI_M3_3` 观察 GPUI 原始 Scene 批次、绘制 Flush、Surface 和触摸日志。M3-3 真机结果见上文及阶段记录。
+2026-10-21 修正该引用后，`entry-default-signed.hap` 通过 SDK 签名校验并由 `hdc install` 在真机安装成功。首次启动时手机锁屏返回 `10106102`；解锁后运行 `hdc shell aa start -a EntryAbility -b com.example.gpuiohosmobilecounter` 成功。当前版本可用 `hdc shell hilog -x -T GPUI_M4_1` 观察 GPUI Scene、触摸分发、按钮数值和绘制日志。M4-1 真机结果见上文及阶段记录。

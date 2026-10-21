@@ -22,6 +22,7 @@ use crate::sdk_ffi::{display, hilog};
 
 use self::dispatcher::Dispatcher;
 use self::platform::OhosPlatform;
+pub(crate) use self::window::TouchInput;
 
 struct Runtime {
     app: ApplicationHandle,
@@ -31,9 +32,11 @@ struct Runtime {
     window_generation: Option<u64>,
 }
 
-struct BootstrapRoot;
+struct BootstrapRoot {
+    value: i64,
+}
 impl Render for BootstrapRoot {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .size_full()
             .flex()
@@ -44,7 +47,7 @@ impl Render for BootstrapRoot {
             .bg(rgb(0xf4f6f8))
             .text_color(rgb(0x20242a))
             .child(div().text_xl().child("GPUI Counter"))
-            .child(div().text_3xl().child("0"))
+            .child(div().text_3xl().child(self.value.to_string()))
             .child(
                 div()
                     .flex()
@@ -56,7 +59,15 @@ impl Render for BootstrapRoot {
                             .py_2()
                             .rounded_md()
                             .bg(rgb(0xdce5ef))
-                            .child("−"),
+                            .child("−")
+                            .on_click(cx.listener(|counter, _, _, cx| {
+                                counter.value = counter.value.saturating_sub(1);
+                                log(
+                                    hilog::LOG_INFO,
+                                    format!("GPUI counter decrement value={}", counter.value),
+                                );
+                                cx.notify();
+                            })),
                     )
                     .child(
                         div()
@@ -66,7 +77,15 @@ impl Render for BootstrapRoot {
                             .rounded_md()
                             .bg(rgb(0x2d6cdf))
                             .text_color(rgb(0xffffff))
-                            .child("+"),
+                            .child("+")
+                            .on_click(cx.listener(|counter, _, _, cx| {
+                                counter.value = counter.value.saturating_add(1);
+                                log(
+                                    hilog::LOG_INFO,
+                                    format!("GPUI counter increment value={}", counter.value),
+                                );
+                                cx.notify();
+                            })),
                     )
                     .child(
                         div()
@@ -75,7 +94,12 @@ impl Render for BootstrapRoot {
                             .py_2()
                             .rounded_md()
                             .bg(rgb(0xdce5ef))
-                            .child("Reset"),
+                            .child("Reset")
+                            .on_click(cx.listener(|counter, _, _, cx| {
+                                counter.value = 0;
+                                log(hilog::LOG_INFO, "GPUI counter reset value=0".into());
+                                cx.notify();
+                            })),
                     ),
             )
     }
@@ -88,7 +112,12 @@ pub(crate) enum SurfaceEvent {
     Destroyed(u64),
 }
 
-static HOST_EVENTS: Mutex<VecDeque<SurfaceEvent>> = Mutex::new(VecDeque::new());
+enum HostEvent {
+    Surface(SurfaceEvent),
+    Touch(TouchInput),
+}
+
+static HOST_EVENTS: Mutex<VecDeque<HostEvent>> = Mutex::new(VecDeque::new());
 static UI_THREAD: OnceLock<ThreadId> = OnceLock::new();
 
 fn on_ui_thread() -> bool {
@@ -99,7 +128,13 @@ fn on_ui_thread() -> bool {
 
 pub(crate) fn enqueue_surface(event: SurfaceEvent) {
     if let Ok(mut queue) = HOST_EVENTS.lock() {
-        queue.push_back(event);
+        queue.push_back(HostEvent::Surface(event));
+    }
+}
+
+pub(crate) fn enqueue_touch(event: TouchInput) {
+    if let Ok(mut queue) = HOST_EVENTS.lock() {
+        queue.push_back(HostEvent::Touch(event));
     }
 }
 
@@ -191,6 +226,14 @@ pub(crate) fn pump() -> u32 {
             .ok()
             .and_then(|mut queue| queue.pop_front());
         let Some(event) = event else { break };
+        let event = match event {
+            HostEvent::Surface(event) => event,
+            HostEvent::Touch(input) => {
+                window::dispatch_touch(input);
+                events += 1;
+                continue;
+            }
+        };
         let (kind, generation) = match event {
             SurfaceEvent::Created(n) => ("created", n),
             SurfaceEvent::Changed(n) => ("changed", n),
@@ -246,7 +289,7 @@ pub(crate) fn pump() -> u32 {
                         if runtime.window.is_none() {
                             match runtime.app.update(|cx| {
                                 cx.open_window(WindowOptions::default(), |_, cx| {
-                                    cx.new(|_| BootstrapRoot)
+                                    cx.new(|_| BootstrapRoot { value: 0 })
                                 })
                             }) {
                                 Ok(handle) => {

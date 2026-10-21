@@ -320,5 +320,5 @@ unsafe extern "C" fn on_touch(component: *mut xc::XComponent, window: *mut c_voi
     }
     let generation = state.generation;
     drop(state);
-    touch::log_event(component, window, generation);
+    touch::enqueue_event(component, window, generation);
 }

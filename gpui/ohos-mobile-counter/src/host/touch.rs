@@ -1,11 +1,13 @@
-//! Touch probe after the Surface callback validates the live window.
+//! Copy SDK touch data in the callback; GPUI receives it later on the UI pump.
 
 use std::ffi::c_void;
 
+use crate::gpui::{self, TouchInput};
+use crate::gpui_core::TouchPhase;
 use crate::host::logging::log;
 use crate::sdk_ffi::{hilog, xcomponent as xc};
 
-pub(super) fn log_event(component: *mut xc::XComponent, window: *mut c_void, generation: u64) {
+pub(super) fn enqueue_event(component: *mut xc::XComponent, window: *mut c_void, generation: u64) {
     // All-zero is valid for every field, including bool. The SDK fills the
     // structure on success, and failure never reads uninitialized memory.
     let mut event: xc::TouchEvent = unsafe { std::mem::zeroed() };
@@ -25,15 +27,44 @@ pub(super) fn log_event(component: *mut xc::XComponent, window: *mut c_void, gen
         );
         return;
     }
+    let phase = match event.event_type {
+        xc::TOUCH_DOWN => TouchPhase::Started,
+        xc::TOUCH_MOVE => TouchPhase::Moved,
+        xc::TOUCH_UP => TouchPhase::Ended,
+        xc::TOUCH_CANCEL => TouchPhase::Cancelled,
+        other => {
+            log(
+                hilog::LOG_WARN,
+                format!("touch: unknown event type={other}"),
+            );
+            return;
+        }
+    };
+    if !event.x.is_finite() || !event.y.is_finite() {
+        log(hilog::LOG_ERROR, "touch: non-finite coordinate".into());
+        return;
+    }
     log(
         hilog::LOG_INFO,
         format!(
-            "touch: generation={generation} type={} points={} pos=({:.1},{:.1})vp thread={:?}",
-            event.event_type,
+            "touch: generation={generation} id={} phase={phase:?} points={} pos=({:.1},{:.1})px thread={:?}",
+            event.id,
             event.num_points,
             event.x,
             event.y,
             std::thread::current().id()
         ),
     );
+    gpui::enqueue_touch(TouchInput {
+        window: window as usize,
+        generation,
+        source_id: event.id,
+        phase,
+        x_pixels: event.x,
+        y_pixels: event.y,
+        force: event
+            .force
+            .is_finite()
+            .then_some(event.force.clamp(0.0, 1.0)),
+    });
 }

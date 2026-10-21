@@ -1,6 +1,7 @@
 //! XComponent window facade and current polling-based frame delivery.
 
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::ptr::NonNull;
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
@@ -43,10 +44,112 @@ pub(crate) fn pump_frames() {
     }
 }
 
+/// SDK coordinates are physical pixels relative to the XComponent Surface.
+#[derive(Clone, Copy)]
+pub(crate) struct TouchInput {
+    pub(crate) window: usize,
+    pub(crate) generation: u64,
+    pub(crate) source_id: i32,
+    pub(crate) phase: TouchPhase,
+    pub(crate) x_pixels: f32,
+    pub(crate) y_pixels: f32,
+    pub(crate) force: Option<f32>,
+}
+
+#[derive(Default)]
+struct TouchIds {
+    next: u64,
+    active: HashMap<i32, TouchId>,
+}
+
+impl TouchIds {
+    fn for_phase(&mut self, source_id: i32, phase: TouchPhase) -> Option<TouchId> {
+        match phase {
+            TouchPhase::Started => {
+                if self.active.contains_key(&source_id) {
+                    return None;
+                }
+                self.next = self.next.checked_add(1)?;
+                let id = TouchId(self.next);
+                self.active.insert(source_id, id);
+                Some(id)
+            }
+            TouchPhase::Moved => self.active.get(&source_id).copied(),
+            TouchPhase::Ended | TouchPhase::Cancelled => self.active.remove(&source_id),
+        }
+    }
+}
+
+/// Called only by the ArkUI pump, after the SDK callback has returned.
+pub(crate) fn dispatch_touch(input: TouchInput) -> bool {
+    let Some(snapshot) = surface::snapshot() else {
+        return false;
+    };
+    if snapshot.window != input.window || snapshot.generation != input.generation {
+        return false;
+    }
+    let callbacks = FRAME_WINDOWS.with(|slot| {
+        slot.borrow()
+            .iter()
+            .find(|(window, _)| {
+                window.window == input.window && window.generation == input.generation
+            })
+            .and_then(|(_, callbacks)| callbacks.upgrade())
+    });
+    let Some(callbacks) = callbacks else {
+        return false;
+    };
+    let density = display::default_display()
+        .map(|info| info.density)
+        .unwrap_or(1.0);
+    if !density.is_finite() || density <= 0.0 {
+        return false;
+    }
+    let (id, mut callback) = {
+        let mut state = callbacks.borrow_mut();
+        if state.input.is_none() {
+            return false;
+        }
+        let Some(id) = state.touch_ids.for_phase(input.source_id, input.phase) else {
+            log(
+                hilog::LOG_WARN,
+                format!(
+                    "GPUI touch ignored: unmatched or duplicate phase={:?} source_id={}",
+                    input.phase, input.source_id
+                ),
+            );
+            return false;
+        };
+        (id, state.input.take().expect("input callback checked"))
+    };
+    let x = input.x_pixels / density;
+    let y = input.y_pixels / density;
+    callback(PlatformInput::Touch(TouchEvent {
+        id,
+        phase: input.phase,
+        position: point(px(x), px(y)),
+        predicted_position: None,
+        force: input.force,
+    }));
+    let mut state = callbacks.borrow_mut();
+    if state.input.is_none() {
+        state.input = Some(callback);
+    }
+    log(
+        hilog::LOG_INFO,
+        format!(
+            "GPUI touch dispatched generation={} id={} phase={:?} px=({:.1},{:.1}) logical=({:.1},{:.1}) density={:.2}",
+            input.generation, id.0, input.phase, input.x_pixels, input.y_pixels, x, y, density
+        ),
+    );
+    true
+}
+
 #[derive(Default)]
 struct Callbacks {
     request_frame: Option<Box<dyn FnMut(RequestFrameOptions)>>,
     input: Option<Box<dyn FnMut(PlatformInput) -> DispatchEventResult>>,
+    touch_ids: TouchIds,
     active: Option<Box<dyn FnMut(bool)>>,
     visibility: Option<Box<dyn FnMut(WindowVisibility)>>,
     hover: Option<Box<dyn FnMut(bool)>>,
