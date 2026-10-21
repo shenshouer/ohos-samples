@@ -1,6 +1,6 @@
 # GPUI 鸿蒙手机计数器
 
-这是与 [`../desktop-counter/`](../desktop-counter/) 分离的手机端工程。已完成 **M0、M1、M2、R-1、M3-1、M3-1A、M3-2、M3-3、M4-1 和 M4-2**：运行时 Node-API 模块为纯 Rust `cdylib`；真机已验证 XComponent 生命周期、GPUI 计数器文字和按钮、`Reset → + → −` 的 `0 → 1 → 0` 交互，以及按需帧和空闲/后台停帧。完整生命周期验收仍待 M4-3。
+这是与 [`../desktop-counter/`](../desktop-counter/) 分离的手机端工程。已完成 **M0、M1、M2、R-1、M3-1、M3-1A、M3-2、M3-3、M4-1、M4-2 和 M4-3**：运行时 Node-API 模块为纯 Rust `cdylib`；真机已验证 GPUI 计数器交互、按需帧、空闲/后台停帧、Surface 重建和 Ability 退出清理。M4-4 的 README 全面整理仍待执行。
 
 - GPUI 官方源码固定提交：`c4a82ab1ab958aa43b0c0b15c0bad4fb77a7ca7f`；关闭默认 feature。`Cargo.lock` 锁定解析出的传递依赖。
 - Rust 目标：`aarch64-unknown-linux-ohos`。
@@ -45,6 +45,8 @@ M1-2A 的 Rust-only Node-API 替换过程和真机结果见 [`../../docs/gpui/m1
 **M4-1 触摸交互：** [`../../docs/gpui/m4-1-touch.md`](../../docs/gpui/m4-1-touch.md) 记录 SDK 触摸读取、Surface 代次排队、密度换算和 GPUI `Touch` 分发。`+`、`−`、`Reset` 的数值变化仅在 GPUI Rust 视图的点击回调中发生。aarch64 原生构建、签名 HAP 构建与安装通过；真机受控点击 `Reset → + → −` 显示 `0 → 1 → 0`，截图确认数字 `1`，从 `+` 拖出后未误点击。系统 `Cancel` 事件映射已实现，尚未由真机触发验证。2026-10-21 的 M4-1 延迟追查中，受控点击从 SDK 抬起到计数回调约 45 ms、到 Drawing Flush 约 53 ms；当时仍使用 50 ms ArkTS 轮询。后续 M4-2 已改为按需帧调度。
 
 **M4-2 按需帧：** [`../../docs/gpui/m4-2-frame.md`](../../docs/gpui/m4-2-frame.md) 记录 SDK XComponent 帧回调 FFI、GPUI `frame_waker`/`schedule_frame`、前后台暂停恢复和真机结果。待绘制时注册帧回调，回调到达后注销并在 ArkUI 线程推进 GPUI；ArkTS 的 250 ms 定时器只做 Surface 销毁及后台任务的安全检查，不再驱动绘制。本机曾在重复绘制时记录系统 `NativeWindowFlushBuffer failed ret=41207000`，即 SDK 定义的缓冲区状态无效；当前逐帧重建屏幕 Drawing Surface、复用 GPU context 的最终包未再观察到该错误。真机受控 `+` 点击从 SDK 抬起到 GPUI 计数回调约 9 ms、到 Scene Flush 约 18 ms，截图显示 `1`；空闲约 14 秒无连续帧回调，Home 后也停帧。此机无需 Native VSync FFI。一次高频触摸期间的受控点击未触发 `on_click`，后续静默复测正常；原因仍待观察。Flush 到实际屏幕呈现的耗时尚未测量，因此用户报告的偶发秒级视觉延迟不能宣称已在所有情况下消除。
+
+**M4-3 生命周期：** [`../../docs/gpui/m4-3-lifecycle.md`](../../docs/gpui/m4-3-lifecycle.md) 记录重复进入、Hide/Show、Resize、后台返回和退出的操作结果。页面的 `Exit Demo` 测试按钮调用 SDK `terminateSelf()`；Ability `onDestroy` 经 Rust `gpuiStop()` 停止帧请求、清理残留 Surface/Drawing 和 GPUI 窗口。真机退出时曾成功注销一条待处理帧，Surface 释放 Drawing，GPUI 窗口主动关闭；随后重新启动可显示计数器并点击 `+`。Back/Home 在此机保留后台 Ability，不等同于真正退出。最终 HAP 的格式、交叉检查、原生与签名构建、arm64-v8a 架构和系统动态依赖检查通过。长时间压力运行与屏幕实际呈现耗时仍未验证。
 
 **M0-4 预检与结论：** SDK aarch64 库导出计划使用的 Drawing、XComponent 和 Node-API 符号。真机先前拒绝执行放在 `/data/local/tmp` 的独立探针，并拒绝 SDK 测试签名 HAP；HarmonyOS 调试签名 HAP 安装后，应用日志 `Rust probe bits: 7` 已确认最小加载链。可复现 shell 探针源码在 [`probes/m0_library_load.c`](probes/m0_library_load.c)。
 

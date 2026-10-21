@@ -24,4 +24,13 @@ export default class EntryAbility extends UIAbility {
   onForeground(): void {
     nativeProbe.gpuiResume();
   }
+
+  onWindowStageDestroy(): void {
+    hilog.info(DOMAIN, TAG, 'window stage destroyed');
+  }
+
+  onDestroy(): void {
+    const stopped: number = nativeProbe.gpuiStop();
+    hilog.info(DOMAIN, TAG, 'ability destroyed gpuiStop=%{public}d', stopped);
+  }
 }

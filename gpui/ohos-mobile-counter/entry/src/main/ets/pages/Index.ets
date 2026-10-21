@@ -46,6 +46,16 @@ struct Index {
     }
   }
 
+  private async exitApp(): Promise<void> {
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    try {
+      await context.terminateSelf();
+      hilog.info(DOMAIN, TAG, 'terminateSelf completed');
+    } catch (error) {
+      hilog.error(DOMAIN, TAG, 'terminateSelf failed: %{public}s', String(error));
+    }
+  }
+
   build() {
     Column() {
       Text('GPUI mobile host: M4-2')
@@ -64,6 +74,8 @@ struct Index {
         Button('Portrait')
           .onClick(() => { this.changeOrientation(false); })
       }
+      Button('Exit Demo')
+        .onClick(() => { this.exitApp(); })
       if (this.showSurface) {
         XComponent({ id: 'gpui_surface', type: 'surface', libraryname: 'gpui_mobile_counter' })
           .width(this.narrowSurface ? '80%' : '100%')

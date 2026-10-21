@@ -206,6 +206,42 @@ pub(crate) fn pump_frame() -> u32 {
     pump_inner(true)
 }
 
+pub(crate) fn stop() -> u32 {
+    if !on_ui_thread() {
+        log(
+            hilog::LOG_WARN,
+            "GPUI stop rejected off ArkUI thread".into(),
+        );
+        return 0;
+    }
+    RUNTIME.with(|slot| {
+        let mut borrowed = slot.borrow_mut();
+        if let Some(runtime) = borrowed.as_mut() {
+            let generation = runtime.window_generation.take();
+            if let Some(handle) = runtime.window.take() {
+                match runtime
+                    .app
+                    .update(|cx| handle.update(cx, |_, window, _| window.remove_window()))
+                {
+                    Ok(_) => log(
+                        hilog::LOG_INFO,
+                        format!("GPUI window closed on Ability exit generation={generation:?}"),
+                    ),
+                    Err(error) => log(
+                        hilog::LOG_WARN,
+                        format!("GPUI window close on Ability exit failed: {error}"),
+                    ),
+                }
+            }
+        }
+    });
+    if let Ok(mut queue) = HOST_EVENTS.lock() {
+        queue.clear();
+    }
+    window::clear_frame_windows();
+    1
+}
+
 fn pump_inner(draw_frame: bool) -> u32 {
     if !on_ui_thread() {
         log(
@@ -336,6 +372,11 @@ fn pump_inner(draw_frame: bool) -> u32 {
                                 log(
                                     hilog::LOG_WARN,
                                     format!("GPUI window close failed: {error}"),
+                                );
+                            } else {
+                                log(
+                                    hilog::LOG_INFO,
+                                    format!("GPUI window closed generation={generation}"),
                                 );
                             }
                         }

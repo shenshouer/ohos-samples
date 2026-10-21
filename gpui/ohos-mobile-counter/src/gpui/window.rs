@@ -24,6 +24,10 @@ thread_local! {
     static FRAME_WINDOWS: RefCell<Vec<(SurfaceSnapshot, Weak<RefCell<Callbacks>>)>> = const { RefCell::new(Vec::new()) };
 }
 
+pub(crate) fn clear_frame_windows() {
+    FRAME_WINDOWS.with(|slot| slot.borrow_mut().clear());
+}
+
 pub(crate) fn pump_frames() {
     let windows = FRAME_WINDOWS.with(|slot| {
         let mut windows = slot.borrow_mut();

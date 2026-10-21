@@ -1,6 +1,6 @@
 # GPUI 桌面计数器迁移到鸿蒙：需求与技术路线
 
-状态：桌面计数器已在 macOS arm64 上编译并交互验证；独立手机工程已完成 M0、M1、M2、R-1、M3-1、M3-1A、M3-2、M3-3、M4-1 和 M4-2。GPUI 计数器文字与按钮、触摸 `Reset → + → −` 的 `0 → 1 → 0`、XComponent 按需帧与空闲/后台停帧均已在真机验证；完整生命周期验收待 M4-3。分阶段任务见 [tasks.md](tasks.md)，触摸和帧调度真机记录分别见 [M4-1 记录](m4-1-touch.md)、[M4-2 记录](m4-2-frame.md)。
+状态：桌面计数器已在 macOS arm64 上编译并交互验证；独立手机工程已完成 M0、M1、M2、R-1、M3-1、M3-1A、M3-2、M3-3、M4-1、M4-2 和 M4-3。GPUI 计数器文字与按钮、触摸 `Reset → + → −` 的 `0 → 1 → 0`、XComponent 按需帧、空闲/后台停帧及 Ability 退出清理均已在真机验证；M4-4 的 README 全面整理仍待完成。分阶段任务见 [tasks.md](tasks.md)，真机记录见 [M4-1 记录](m4-1-touch.md)、[M4-2 记录](m4-2-frame.md)、[M4-3 记录](m4-3-lifecycle.md)。
 
 ## 目标与依赖边界
 
@@ -27,6 +27,8 @@
 6. **输入与帧调度。** 将 XComponent 触摸的按下、移动、抬起和取消转换为 GPUI 的窗口输入事件，按设备密度换算坐标，让 GPUI 自己命中 `+`、`−`、`Reset`。计数变化标记窗口待绘制；先验证 XComponent 的逐帧回调能否安全调度刷新，必要时直接绑定 SDK `native_vsync` 做按需帧请求。VSync 只提供时序，不创建 Surface。
 
 M4-2 实际采用 XComponent 逐帧回调：待绘制时注册、回调到达时注销，再在 ArkUI 线程推进 GPUI 帧。真机确认空闲和后台停止连续回调，因此此阶段没有引入 Native VSync FFI。ArkTS 仍每 250 ms 做一次非绘制安全检查，用于 Surface 销毁和后台任务；它不驱动 Scene 绘制。针对本机重复绘制后出现的 NativeWindow 缓冲区状态错误，当前实现逐帧重建屏幕 Drawing Surface，复用 GPU context；最终进程未复现该错误。长期运行与实际屏幕呈现时间尚未验证，详见 [M4-2 记录](m4-2-frame.md)。
+
+M4-3 真机确认：Back/Home 在本机使 Ability 后台保留，退出验收因此使用 SDK `terminateSelf()`。Ability `onDestroy` 调用 Rust `gpuiStop()`，主动停止帧、释放残留 Surface/Drawing 状态并关闭 GPUI 窗口；本轮已观察到待处理帧注销成功、Drawing 释放、GPUI 窗口关闭及冷启动重建，详见 [M4-3 记录](m4-3-lifecycle.md)。
 
 ## 验收与阶段限制
 

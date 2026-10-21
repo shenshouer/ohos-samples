@@ -24,17 +24,21 @@ static STATE: Mutex<FrameState> = Mutex::new(FrameState {
     callbacks: 0,
 });
 
-fn unregister(component: usize) {
+fn unregister(component: usize) -> bool {
     // SAFETY: the caller retained the SDK-owned component while its callback
     // registration was active. This runs outside STATE's lock.
     let result = unsafe {
         xc::OH_NativeXComponent_UnregisterOnFrameCallback(component as *mut xc::XComponent)
     };
-    if let Err(error) = xc::check_result(result) {
-        log(
-            hilog::LOG_ERROR,
-            format!("XComponent frame unregister failed code={}", error.0),
-        );
+    match xc::check_result(result) {
+        Ok(()) => true,
+        Err(error) => {
+            log(
+                hilog::LOG_ERROR,
+                format!("XComponent frame unregister failed code={}", error.0),
+            );
+            false
+        }
     }
 }
 
@@ -52,7 +56,7 @@ pub(crate) fn surface_ready(component: *mut xc::XComponent, generation: u64) {
         }
     };
     if let Some(old) = old {
-        unregister(old);
+        let _ = unregister(old);
     }
     wake_for(generation);
 }
@@ -68,9 +72,13 @@ pub(crate) fn surface_lost(component: *mut xc::XComponent, generation: u64) {
         state.registered = false;
         old
     };
-    if let Some(old) = old {
-        unregister(old);
-    }
+    let cancelled = old.map(unregister);
+    log(
+        hilog::LOG_INFO,
+        format!(
+            "XComponent frame surface lost generation={generation} pending_cancel_result={cancelled:?}"
+        ),
+    );
 }
 
 pub(crate) fn wake_for(generation: u64) {
@@ -131,12 +139,12 @@ pub(crate) fn pause() {
         state.registered = false;
         (old, state.requests, state.callbacks)
     };
-    if let Some(old) = old {
-        unregister(old);
-    }
+    let cancelled = old.map(unregister);
     log(
         hilog::LOG_INFO,
-        format!("GPUI frame paused requests={requests} callbacks={callbacks}"),
+        format!(
+            "GPUI frame paused requests={requests} callbacks={callbacks} pending_cancel_result={cancelled:?}"
+        ),
     );
 }
 
@@ -166,7 +174,7 @@ unsafe extern "C" fn on_frame(
         state.callbacks += 1;
         (state.generation, state.callbacks)
     };
-    unregister(component as usize);
+    let _ = unregister(component as usize);
     if ordinal <= 3 || ordinal % 120 == 0 {
         log(
             hilog::LOG_INFO,

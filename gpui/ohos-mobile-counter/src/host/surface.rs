@@ -96,6 +96,36 @@ pub(crate) fn draw_scene(
     Ok(())
 }
 
+/// Release any retained native resources when the owning Ability terminates.
+pub(crate) fn shutdown() {
+    let (component, generation, drawing_released) = {
+        let Ok(mut state) = STATE.lock() else {
+            log(
+                hilog::LOG_ERROR,
+                "surface shutdown: state lock poisoned".into(),
+            );
+            return;
+        };
+        let component = state.registered_component;
+        let generation = state.generation;
+        let drawing_released = state.drawing.take().is_some();
+        state.registered_component = 0;
+        state.window = 0;
+        state.width = 0;
+        state.height = 0;
+        state.pixel_width = 0;
+        state.pixel_height = 0;
+        (component, generation, drawing_released)
+    };
+    if component != 0 {
+        frame::surface_lost(component as *mut xc::XComponent, generation);
+    }
+    log(
+        hilog::LOG_INFO,
+        format!("surface shutdown generation={generation} drawing_released={drawing_released}"),
+    );
+}
+
 // The SDK accepts a pointer to this table. It must outlive every callback.
 static mut CALLBACKS: xc::Callbacks = xc::Callbacks {
     on_surface_created: Some(on_created),
