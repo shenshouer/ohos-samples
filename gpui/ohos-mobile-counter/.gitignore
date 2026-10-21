@@ -1,0 +1,15 @@
+/target/
+/.hvigor/
+/.idea/
+/entry/.cxx/
+/entry/build/
+/entry/libs/
+/build/
+/local.properties
+/build-profile.json5
+/oh-package-lock.json5
+/.clangd
+/.clang-tidy
+*.p12
+*.p7b
+*.cer
