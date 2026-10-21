@@ -40,5 +40,9 @@
 | 2026-10-21 | 5 | 暂存 `docs/agent-operations.md`、`docs/gpui/` 和 `gpui/ohos-mobile-counter/` 的本轮变更，执行 `git diff --cached --name-status`、`--stat`、`--check`。 | 暂存 21 个文件（新增 7 个、修改 14 个），均属 M3-1/M3-1A 代码及文档；没有签名材料和构建产物。暂存差异检查通过。 |
 | 2026-10-21 | 6 | 创建本地提交 `Add HarmonyOS GPUI platform and rename source module`。 | 提交成功，提交前的对象 ID 为 `ef1d950`，包含 21 个已核对文件。提交稍后仅为补入本条操作记录而在推送前修订；最终对象 ID 以 `git log` 为准。 |
 | 2026-10-21 | 7 | 执行 `git push -u origin main`，尝试将本地初始提交和 M3-1/M3-1A 提交推送到上述 GitHub `main`。 | 自动审批审查拒绝：虽然用户再次说“push”，但未在可信用户内容中明确确认此具体目的地及完整源码/文档 payload。没有进行网络推送，也不通过替代命令绕过；已提出含具体目的地和范围的确认问题，等待回复。 |
+| 2026-10-21 | 8 | 用户随后明确回复“push到main分支”；核对本地 `main`、两个提交、工作区和 `origin` 地址。 | 结合上条包含仓库地址和推送范围的确认问题，本次回复明确授权推送到上述 `origin/main`；工作区干净，本地提交为 `69e2116` 和 `39aa4d9`。 |
+| 2026-10-21 | 9 | 执行 `git ls-remote --symref origin HEAD refs/heads/main`，重新核对远端状态。 | 常规沙箱中因 `github.com` DNS 解析失败（`Could not resolve host`）；改用获批网络权限后命令成功且仍未返回远端引用，确认远端 `main` 尚不存在。 |
+| 2026-10-21 | 10 | 执行 `git push -u origin main`，推送两个已核对的本地提交。 | 推送成功，Git 报告 `[new branch] main -> main`，并将本地 `main` 设为跟踪 `origin/main`。 |
+| 2026-10-21 | 11 | 执行 `git rev-parse HEAD`、`git rev-parse origin/main` 与 `git ls-remote origin refs/heads/main`，核对推送结果。 | 三处均指向 `39aa4d930a61903e5df0d19b62fa445cf872394a`；该提交及其父提交已在远端 `main`。 |
 
-当前仅完成本地提交，远端仍为空。收到用户对具体目的地与范围的明确确认后，才能再次尝试推送；本节不把未执行的推送记为成功。
+此前的审批拒绝在用户明确确认后已解除；上述远端核对证实源码提交推送成功。
